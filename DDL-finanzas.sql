@@ -5,87 +5,110 @@
 -- 2. Balance suma y saldos
 -- Reporte nativo de libra     ==> No Habilitar
  
-3. FLUJO DE CAJA: .MAYOR BANCO.xls 
-Campos requeridos: CODIGO ENTIDAD, NOMBRE ENTIDAD,FECHA,ASIENTO,LINEA,CUENTA.CONCEPTO,SIGNO, IMPORTE,DOCUMENTO,USUARIO,ENTIDAD,CODIGO CONCEPTO
- 
-create table hechos_flujo_caja (
-id integer,
-empresa varchar2(5),
-codigo_entidad varchar2(15),
-nombre_entidad varchar2(500),
-fecha_asiento date ,
-numero_asiento_borrador number(12),
-numero_linea_borrador number(9),
-codigo_cuenta varchar2(15),
-concepto varchar2(100),
-signo varchar2(1),
-importe number(19,4),
-documento varchar2(100),
-usuario varchar2(10),
-entidad varchar2(2),
-codigo_concepto varchar2(4)
-created_at datetime,
-updated_at datetime
- );
+/* 3. FLUJO DE CAJA: .MAYOR BANCO.xls 
+Campos requeridos: CODIGO ENTIDAD, NOMBRE ENTIDAD,FECHA,ASIENTO,LINEA,CUENTA, CONCEPTO,SIGNO, IMPORTE,DOCUMENTO,USUARIO,ENTIDAD,CODIGO CONCEPTO
+
+Filtros para los datos de cuentas:
+Codigo_cuenta: BOL => 111005 .. 111010 */
+
+CREATE TABLE hechos_flujo_caja (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    empresa VARCHAR(5) NOT NULL,
+    codigo_entidad VARCHAR(15),
+    nombre_entidad VARCHAR(500),
+    fecha_asiento DATE,
+    numero_asiento_borrador BIGINT,         -- hasta 12 dígitos
+    numero_linea_borrador INT,              -- hasta 9 dígitos
+    codigo_cuenta VARCHAR(15),
+    concepto VARCHAR(100),
+    signo CHAR(1),                          -- usa CHAR(1) si es fijo
+    importe DECIMAL(19,4) ,
+    documento VARCHAR(100),
+    usuario VARCHAR(10),
+    entidad VARCHAR(2),
+    codigo_concepto VARCHAR(4),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+);
+  -- se podria complementar  
+    INDEX idx_empresa_cuenta (empresa, codigo_cuenta),
+    INDEX idx_fecha_asiento (fecha_asiento),
+    INDEX idx_codigo_entidad (codigo_entidad)
 
 
-4. Mayor_Detallado_proveedores.xlsx
+
+/* 4. Mayor_Detallado_proveedores.xlsx
 Campos requeridos: Asiento, Documento, importe, Codigo proveedor
+Filtros para los datos de cuentas:
+Codigo_cuenta: BOL => 220505 .. 221001 */
 
-create table hechos_mayor_det_prov (
-id integer,
-empresa varchar2(5),
-codigo_proveedor varchar2(15),
-nombre_proveedor varchar2(500),
-asiento number(12),
-documento varchar2(100),
-importe number(19,4),
-created_at datetime,
-updated_at datetime
- );
+CREATE TABLE hechos_mayor_det_prov (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    empresa VARCHAR(5) NOT NULL,
+    codigo_proveedor VARCHAR(15) NOT NULL,
+    asiento BIGINT,
+    documento VARCHAR(100),
+    importe DECIMAL(19,4) ,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+  -- se podria complementar  
+    INDEX idx_empresa_proveedor (empresa, codigo_proveedor),
+    INDEX idx_asiento (asiento)
  
 
-5. CXC: Reporte de cartera paso 2
+/* 5. CXC: Reporte de cartera paso 2
 Campos requeridos: Fecha factura, Fecha vencimiento, Numero Factura, Saldo, Importe, código Cliente
+ */
+CREATE TABLE hechos_cxc (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    empresa VARCHAR(5) NOT NULL,
+    codigo_cliente VARCHAR(15),
+    fecha_factura DATE,
+    fecha_vencimiento DATE,
+    documento VARCHAR(100),
+    importe DECIMAL(19,4),
+    saldo DECIMAL(19,4) ,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+  -- Se podria implementar  
+    INDEX idx_empresa_cliente (empresa, codigo_cliente),
+    INDEX idx_fecha_vencimiento (fecha_vencimiento)
 
-create table hechos_CXC (
-id integer,
-empresa varchar2(5),
-codigo_cliente varchar2(15),
-**** nombre_entidad varchar2(500),
-asiento number(12),
-fecha_factura date,
-fecha_vencimiento date,
-numero_factura | documento varchar2(100),
-importe number(19,4),
-saldo NUMBER(19,4),
-created_at datetime,
-updated_at datetime
- );
 
-
-6. CXP: sitcarpa_isoliz
+/* 6. CXP: sitcarpa_isoliz
 Reporte nativo de libra
 Campos requeridos: Fecha,Fecha Factura, Fecha Vencimiento, Codigo proveedor, importe
-
-
+ */
 
 -- 7. Maestro Clientes  (ya se tiene en el BI CORPS es necesario nuevamente enviar?)
 -- Campos requeridos ??  ==> No Habilitar
 
-8. Maestro Proveedores.
-Campos requeridos ??
-    Campos requeridos ?? Codigo, Nombre,Nit, Razon Social, Ciudad, Departamento
+/* 8. Maestro Proveedores.
+   Campos requeridos: Codigo, Nombre,Nit, Razon Social, Ciudad, Departamento
+ */
+CREATE TABLE dim_proveedores (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    empresa VARCHAR(5) NOT NULL,
+    codigo_proveedor VARCHAR(15) NOT NULL,
+    nombre_proveedor VARCHAR(500),
+    razon_social VARCHAR(500),
+    nif VARCHAR(50),
+    cod_dpto VARCHAR(5),
+    departamento VARCHAR(50),
+    cod_ciudad VARCHAR(5),
+    ciudad VARCHAR(50),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+  -- Se podria implementar  
+    UNIQUE KEY uk_empresa_prov (empresa, codigo_proveedor),
+    INDEX idx_nif (nif)
 
-create table dim_proveedores (
-id integer,
-empresa varchar2(5),
-codigo_proveedor varchar2(15),
-nombre_proveedor varchar2(500),
-razon_social varchar2(500),
-nif VARCHAR2(50),
-departamento varchar2(50)
-ciudad varchar2(50)
-created_at datetime,
-updated_at datetime
- );
+
+
+/** QUERY Que se agrego a la vista VA_PROVEEDORES para enviar los datos */
+D_PROV = SELECT lvprov.nombre FROM provincias lvprov WHERE lvprov.provincia = va_proveedores.provincia AND lvprov.estado = va_proveedores.estado
+D_DPTO = SELECT p.nombre FROM comunidades_autonomas p WHERE p.comunidad_autonoma = va_proveedores.reservadoa01 and p.estado=va_proveedores.estado
+
