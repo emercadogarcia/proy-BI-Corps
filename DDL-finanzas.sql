@@ -44,7 +44,7 @@ Codigo_cuenta: BOL => 220505 .. 221001 */
 
 CREATE TABLE hechos_mayor_det_prov (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    empresa VARCHAR(5) NOT NULL,
+    empresa V ARCHAR(5) NOT NULL,
     codigo_proveedor VARCHAR(15) NOT NULL,
     asiento BIGINT,
     documento VARCHAR(100),
@@ -79,8 +79,22 @@ CREATE TABLE hechos_cxc (
 
 /* 6. CXP: sitcarpa_isoliz
 Reporte nativo de libra
-Campos requeridos: Fecha,Fecha Factura, Fecha Vencimiento, Codigo proveedor, importe
+Campos requeridos: Fecha, Fecha Factura, Fecha Vencimiento, Codigo proveedor, importe
  */
+CREATE TABLE hechos_cxp (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    empresa VARCHAR(5) NOT NULL,
+    codigo_proveedor VARCHAR(15) NOT NULL,
+    fecha DATE,  --fecha asiento
+    fecha_factura DATE,
+    fecha_vencimiento DATE,
+    documento VARCHAR(100),
+    importe DECIMAL(19,4),
+    created_at DATETIME ,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+
 
 -- 7. Maestro Clientes  (ya se tiene en el BI CORPS es necesario nuevamente enviar?)
 -- Campos requeridos ??  ==> No Habilitar
