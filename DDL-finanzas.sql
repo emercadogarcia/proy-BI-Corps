@@ -126,3 +126,33 @@ CREATE TABLE dim_proveedores (
 D_PROV = SELECT lvprov.nombre FROM provincias lvprov WHERE lvprov.provincia = va_proveedores.provincia AND lvprov.estado = va_proveedores.estado
 D_DPTO = SELECT p.nombre FROM comunidades_autonomas p WHERE p.comunidad_autonoma = va_proveedores.reservadoa01 and p.estado=va_proveedores.estado
 
+/**** TABLA SUMAS Y SALDOS del reporte de BI */ 
+
+CREATE TABLE hechos_sumas_saldos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    empresa VARCHAR(5) NOT NULL,
+    codigo_cuenta VARCHAR(15),
+    ejercicio DECIMAL(4,0),
+    mes DECIMAL(3,0),
+    tipo_periodo VARCHAR(5),
+    grupo_balance VARCHAR(15), /* CODIGO_GRUPO */
+    centro_contable VARCHAR(4), /*caracter_asiento */
+    acumulado_debe DECIMAL(19,4),
+    acumulado_haber DECIMAL(19,4),  
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+/*** TABLA GRUPO BALANCE Y CENTRO CONTABLE*/
+
+CREATE TABLE dim_grupo_balance_ccont(
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    empresa VARCHAR(5) NOT NULL,
+    grupo_balance VARCHAR(15), /* CODIGO_GRUPO */
+    d_grupo_balance VARCHAR(500),
+    centro_contable VARCHAR(4), /*caracter_asiento */
+    d_centro_contable varchar(500),
+    estado VARCHAR(4),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
