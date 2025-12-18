@@ -27,6 +27,7 @@ CREATE TABLE hechos_flujo_caja (
     usuario VARCHAR(10),
     entidad VARCHAR(2),
     codigo_concepto VARCHAR(4),
+    centro_contable VARCHAR(4), /*caracter_asiento */
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 );
@@ -49,6 +50,7 @@ CREATE TABLE hechos_mayor_det_prov (
     asiento BIGINT,
     documento VARCHAR(100),
     importe DECIMAL(19,4) ,
+    centro_contable VARCHAR(4), /*caracter_asiento */
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -69,6 +71,7 @@ CREATE TABLE hechos_cxc (
     documento VARCHAR(100),
     importe DECIMAL(19,4),
     saldo DECIMAL(19,4) ,
+    centro_contable VARCHAR(4), /*caracter_asiento */
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -90,6 +93,7 @@ CREATE TABLE hechos_cxp (
     fecha_vencimiento DATE,
     documento VARCHAR(100),
     importe DECIMAL(19,4),
+    centro_contable VARCHAR(4), /*caracter_asiento */
     created_at DATETIME ,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
