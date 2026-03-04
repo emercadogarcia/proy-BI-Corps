@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ETL Tool — XLS → CSV UTF-8</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a26;
+    --border: #2a2a3e;
+    --accent: #00f5a0;
+    --accent2: #7b61ff;
+    --accent3: #ff6b6b;
+    --text: #e8e8f0;
+    --muted: #6b6b8a;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,245,160,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,245,160,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 48px;
+    gap: 16px;
+  }
+
+  .logo-area h1 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+    line-height: 1;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .logo-area p {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 6px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .badge {
+    background: rgba(0,245,160,0.1);
+    border: 1px solid rgba(0,245,160,0.3);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    padding: 4px 10px;
+    border-radius: 2px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    margin-top: 4px;
+  }
+
+  /* Pipeline Steps */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 40px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .step {
+    flex: 1;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.3s;
+    position: relative;
+  }
+
+  .step.active { background: rgba(0,245,160,0.07); }
+  .step.done { background: rgba(123,97,255,0.07); }
+
+  .step-num {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 2px;
+    flex-shrink: 0;
+    transition: all 0.3s;
+  }
+
+  .step.active .step-num {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,245,160,0.1);
+  }
+
+  .step.done .step-num {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    background: rgba(123,97,255,0.1);
+  }
+
+  .step-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    transition: color 0.3s;
+  }
+
+  .step.active .step-label { color: var(--accent); }
+  .step.done .step-label { color: var(--text); }
+
+  .step-arrow {
+    color: var(--border);
+    font-size: 1rem;
+    padding: 0 4px;
+    flex-shrink: 0;
+  }
+
+  /* Drop Zone */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 4px;
+    padding: 56px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .drop-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(0,245,160,0.04), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(0,245,160,0.03);
+  }
+
+  .drop-zone:hover::before, .drop-zone.dragover::before { opacity: 1; }
+
+  .drop-icon {
+    font-size: 2.8rem;
+    margin-bottom: 16px;
+    display: block;
+    filter: grayscale(0.3);
+  }
+
+  .drop-zone h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .drop-zone p {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .drop-zone input { display: none; }
+
+  /* Preview Panel */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 24px;
+    overflow: hidden;
+    animation: slideIn 0.4s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .panel-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface2);
+  }
+
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-title .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0;
+  }
+
+  .meta-item {
+    padding: 16px 20px;
+    border-right: 1px solid var(--border);
+  }
+
+  .meta-item:last-child { border-right: none; }
+
+  .meta-key {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 4px;
+  }
+
+  .meta-val {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  .meta-val.accent { color: var(--accent); }
+
+  /* Sheet Selector */
+  .sheet-selector {
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sheet-label {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .sheet-btn {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.2s;
+  }
+
+  .sheet-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .sheet-btn.active {
+    background: rgba(123,97,255,0.15);
+    border-color: var(--accent2);
+    color: var(--accent2);
+  }
+
+  /* Table */
+  .table-wrap {
+    overflow: auto;
+    max-height: 320px;
+    padding: 0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+  }
+
+  thead th {
+    background: var(--surface2);
+    padding: 10px 14px;
+    text-align: left;
+    color: var(--accent);
+    font-size: 0.65rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(42,42,62,0.5);
+    transition: background 0.15s;
+  }
+
+  tbody tr:hover { background: rgba(123,97,255,0.04); }
+
+  tbody td {
+    padding: 9px 14px;
+    color: var(--text);
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  tbody tr:nth-child(even) { background: rgba(255,255,255,0.01); }
+
+  .row-num {
+    color: var(--muted) !important;
+    font-size: 0.6rem;
+    user-select: none;
+  }
+
+  /* Transform Options */
+  .transform-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 20px;
+  }
+
+  .option-card {
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent;
+    text-align: left;
+  }
+
+  .option-card:hover { border-color: var(--accent2); background: rgba(123,97,255,0.04); }
+
+  .option-card input[type=checkbox] { display: none; }
+
+  .option-card.checked {
+    border-color: var(--accent);
+    background: rgba(0,245,160,0.05);
+  }
+
+  .check-box {
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    transition: all 0.2s;
+  }
+
+  .option-card.checked .check-box {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #000;
+  }
+
+  .option-text strong {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    display: block;
+    margin-bottom: 3px;
+    color: var(--text);
+  }
+
+  .option-text span {
+    font-size: 0.7rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+
+  /* Actions */
+  .actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    padding: 12px 24px;
+    border: 1px solid;
+    cursor: pointer;
+    border-radius: 2px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #000;
+  }
+
+  .btn-primary:hover {
+    background: #00e090;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(0,245,160,0.3);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border-color: var(--accent2);
+    color: var(--accent2);
+  }
+
+  .btn-secondary:hover {
+    background: rgba(123,97,255,0.1);
+    transform: translateY(-1px);
+  }
+
+  .btn-outline {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--muted);
+  }
+
+  .btn-outline:hover { border-color: var(--text); color: var(--text); }
+
+  .btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  /* n8n Flow Export */
+  .n8n-panel {
+    background: var(--surface);
+    border: 1px solid var(--accent2);
+    border-radius: 4px;
+    margin-bottom: 24px;
+    overflow: hidden;
+    animation: slideIn 0.4s ease;
+  }
+
+  .n8n-header {
+    background: rgba(123,97,255,0.1);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(123,97,255,0.2);
+  }
+
+  .n8n-title {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .n8n-nodes {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 24px 20px;
+    overflow-x: auto;
+  }
+
+  .n8n-node {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    min-width: 130px;
+    text-align: center;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .n8n-node .node-icon { font-size: 1.4rem; margin-bottom: 6px; }
+
+  .n8n-node .node-type {
+    font-family: var(--mono);
+    font-size: 0.58rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .n8n-node .node-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-top: 2px;
+    color: var(--text);
+  }
+
+  .n8n-edge {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    color: var(--muted);
+    font-size: 1.2rem;
+    flex-shrink: 0;
+  }
+
+  .n8n-edge::before {
+    content: '';
+    display: block;
+    width: 32px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent2), transparent);
+    margin-right: -8px;
+  }
+
+  .code-block {
+    background: #0d0d17;
+    border-top: 1px solid var(--border);
+    padding: 16px 20px;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: #a0a0c0;
+    max-height: 200px;
+    overflow: auto;
+    line-height: 1.7;
+    white-space: pre;
+  }
+
+  .code-block .kw { color: var(--accent2); }
+  .code-block .str { color: var(--accent); }
+  .code-block .num { color: #ff9f7b; }
+  .code-block .key { color: #7bbfff; }
+
+  /* Log */
+  .log {
+    background: #080810;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px 20px;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    line-height: 1.8;
+    max-height: 160px;
+    overflow-y: auto;
+    margin-bottom: 24px;
+  }
+
+  .log-entry { display: flex; gap: 12px; }
+  .log-time { color: var(--muted); flex-shrink: 0; }
+  .log-ok { color: var(--accent); }
+  .log-info { color: var(--accent2); }
+  .log-warn { color: #ffcc00; }
+
+  /* Progress */
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    width: 0%;
+    transition: width 0.5s ease;
+    border-radius: 2px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  .hidden { display: none !important; }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .transform-grid { grid-template-columns: 1fr; }
+    .pipeline { flex-direction: column; }
+    .step-arrow { transform: rotate(90deg); }
+    header { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="logo-area">
+      <h1>ETL TOOL</h1>
+      <p>Extract · Transform · Load</p>
+    </div>
+    <div class="badge">XLS → CSV UTF-8</div>
+  </header>
+
+  <!-- Pipeline -->
+  <div class="pipeline">
+    <div class="step active" id="step-1">
+      <div class="step-num">01</div>
+      <div class="step-label">EXTRACT</div>
+    </div>
+    <div class="step-arrow">›</div>
+    <div class="step" id="step-2">
+      <div class="step-num">02</div>
+      <div class="step-label">TRANSFORM</div>
+    </div>
+    <div class="step-arrow">›</div>
+    <div class="step" id="step-3">
+      <div class="step-num">03</div>
+      <div class="step-label">EXPORT CSV</div>
+    </div>
+    <div class="step-arrow">›</div>
+    <div class="step" id="step-4">
+      <div class="step-num">04</div>
+      <div class="step-label">N8N FLOW</div>
+    </div>
+  </div>
+
+  <!-- Drop Zone -->
+  <div class="drop-zone" id="dropZone">
+    <span class="drop-icon">📊</span>
+    <h2>Arrastra tu archivo aquí</h2>
+    <p>.XLS · .XLSX — CLICK PARA SELECCIONAR</p>
+    <input type="file" id="fileInput" accept=".xls,.xlsx">
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-bar hidden" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <!-- File Metadata -->
+  <div class="panel hidden" id="metaPanel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="dot"></div>
+        ARCHIVO CARGADO
+      </div>
+      <div id="fileName" style="font-family: var(--mono); font-size: 0.7rem; color: var(--accent);"></div>
+    </div>
+    <div class="meta-grid" id="metaGrid"></div>
+  </div>
+
+  <!-- Sheet Selector + Preview -->
+  <div class="panel hidden" id="previewPanel">
+    <div class="panel-header">
+      <div class="panel-title">PREVISUALIZACIÓN DE DATOS</div>
+      <span style="font-family: var(--mono); font-size: 0.65rem; color: var(--muted);">PRIMERAS 50 FILAS</span>
+    </div>
+    <div class="sheet-selector hidden" id="sheetSelector">
+      <span class="sheet-label">HOJA:</span>
+      <div id="sheetBtns"></div>
+    </div>
+    <div class="table-wrap" id="tableWrap"></div>
+  </div>
+
+  <!-- Transform Options -->
+  <div class="panel hidden" id="transformPanel">
+    <div class="panel-header">
+      <div class="panel-title">OPCIONES DE TRANSFORMACIÓN</div>
+    </div>
+    <div class="transform-grid">
+      <label class="option-card checked" id="opt-utf8">
+        <input type="checkbox" checked>
+        <div class="check-box">✓</div>
+        <div class="option-text">
+          <strong>UTF-8 ENCODING</strong>
+          <span>Convierte texto a codificación UTF-8 con BOM para compatibilidad máxima</span>
+        </div>
+      </label>
+      <label class="option-card checked" id="opt-trim">
+        <input type="checkbox" checked>
+        <div class="check-box">✓</div>
+        <div class="option-text">
+          <strong>TRIM ESPACIOS</strong>
+          <span>Elimina espacios al inicio y fin de cada celda</span>
+        </div>
+      </label>
+      <label class="option-card checked" id="opt-header">
+        <input type="checkbox" checked>
+        <div class="check-box">✓</div>
+        <div class="option-text">
+          <strong>INCLUIR ENCABEZADOS</strong>
+          <span>Primera fila como nombres de columna en el CSV</span>
+        </div>
+      </label>
+      <label class="option-card" id="opt-empty">
+        <input type="checkbox">
+        <div class="check-box"></div>
+        <div class="option-text">
+          <strong>OMITIR FILAS VACÍAS</strong>
+          <span>Elimina filas completamente vacías del resultado</span>
+        </div>
+      </label>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions hidden" id="actionsBar">
+    <button class="btn btn-primary" id="btnConvert">⚡ CONVERTIR A CSV</button>
+    <button class="btn btn-secondary" id="btnN8n">🔗 GENERAR FLUJO N8N</button>
+    <button class="btn btn-outline" id="btnReset">↺ NUEVO ARCHIVO</button>
+  </div>
+
+  <!-- Log -->
+  <div class="log hidden" id="logPanel" aria-live="polite"></div>
+
+  <!-- n8n Flow Panel -->
+  <div class="n8n-panel hidden" id="n8nPanel">
+    <div class="n8n-header">
+      <div class="n8n-title">
+        <span>◈</span> FLUJO N8N GENERADO
+      </div>
+      <button class="btn btn-secondary" id="btnCopyN8n" style="padding: 6px 14px; font-size: 0.65rem;">COPIAR JSON</button>
+    </div>
+    <div class="n8n-nodes" id="n8nNodes"></div>
+    <div class="code-block" id="n8nCode"></div>
+  </div>
+
+</div>
+
+<script>
+let workbook = null;
+let currentSheet = null;
+let fileData = null;
+let fileName = '';
+
+// Toggle option cards
+document.querySelectorAll('.option-card').forEach(card => {
+  card.addEventListener('click', () => {
+    const cb = card.querySelector('input[type=checkbox]');
+    const box = card.querySelector('.check-box');
+    cb.checked = !cb.checked;
+    if (cb.checked) {
+      card.classList.add('checked');
+      box.textContent = '✓';
+    } else {
+      card.classList.remove('checked');
+      box.textContent = '';
+    }
+  });
+});
+
+// Drop Zone
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+function showProgress(pct) {
+  document.getElementById('progressBar').classList.remove('hidden');
+  document.getElementById('progressFill').style.width = pct + '%';
+  if (pct >= 100) setTimeout(() => document.getElementById('progressBar').classList.add('hidden'), 600);
+}
+
+function log(msg, type = 'ok') {
+  const panel = document.getElementById('logPanel');
+  panel.classList.remove('hidden');
+  const now = new Date();
+  const time = now.toTimeString().slice(0,8);
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">[${time}]</span><span class="log-${type}">${msg}</span>`;
+  panel.appendChild(entry);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function handleFile(file) {
+  if (!file.name.match(/\.(xls|xlsx)$/i)) {
+    alert('Por favor selecciona un archivo .XLS o .XLSX');
+    return;
+  }
+  fileName = file.name;
+  document.getElementById('logPanel').innerHTML = '';
+  log('Cargando archivo: ' + file.name, 'info');
+  showProgress(20);
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    fileData = e.target.result;
+    showProgress(50);
+    try {
+      workbook = XLSX.read(fileData, { type: 'array', cellDates: true });
+      showProgress(80);
+      displayMeta(file);
+      displaySheets();
+      showProgress(100);
+      log('Archivo cargado correctamente ✓', 'ok');
+      log(`Hojas detectadas: ${workbook.SheetNames.join(', ')}`, 'info');
+      activateStep(2);
+    } catch(err) {
+      log('Error al leer el archivo: ' + err.message, 'warn');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function displayMeta(file) {
+  const sizeKB = (file.size / 1024).toFixed(1);
+  const sizeMB = (file.size / 1048576).toFixed(2);
+  const sheetCount = workbook.SheetNames.length;
+
+  // Count total rows across all sheets
+  let totalRows = 0;
+  workbook.SheetNames.forEach(name => {
+    const ws = workbook.Sheets[name];
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
+    totalRows += range.e.r;
+  });
+
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('metaGrid').innerHTML = `
+    <div class="meta-item"><div class="meta-key">TAMAÑO</div><div class="meta-val accent">${sizeKB > 1024 ? sizeMB + ' MB' : sizeKB + ' KB'}</div></div>
+    <div class="meta-item"><div class="meta-key">HOJAS</div><div class="meta-val accent">${sheetCount}</div></div>
+    <div class="meta-item"><div class="meta-key">FILAS APROX.</div><div class="meta-val">${totalRows.toLocaleString()}</div></div>
+    <div class="meta-item"><div class="meta-key">FORMATO</div><div class="meta-val">${file.name.split('.').pop().toUpperCase()}</div></div>
+    <div class="meta-item"><div class="meta-key">ENCODING DESTINO</div><div class="meta-val accent">UTF-8</div></div>
+  `;
+  document.getElementById('metaPanel').classList.remove('hidden');
+}
+
+function displaySheets() {
+  const names = workbook.SheetNames;
+  currentSheet = names[0];
+
+  if (names.length > 1) {
+    document.getElementById('sheetSelector').classList.remove('hidden');
+    const btns = document.getElementById('sheetBtns');
+    btns.innerHTML = '';
+    names.forEach(name => {
+      const btn = document.createElement('button');
+      btn.className = 'sheet-btn' + (name === currentSheet ? ' active' : '');
+      btn.textContent = name;
+      btn.addEventListener('click', () => {
+        currentSheet = name;
+        document.querySelectorAll('.sheet-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderTable();
+        log(`Hoja seleccionada: ${name}`, 'info');
+      });
+      btns.appendChild(btn);
+    });
+  }
+
+  renderTable();
+  document.getElementById('previewPanel').classList.remove('hidden');
+  document.getElementById('transformPanel').classList.remove('hidden');
+  document.getElementById('actionsBar').classList.remove('hidden');
+}
+
+function renderTable() {
+  const ws = workbook.Sheets[currentSheet];
+  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const preview = data.slice(0, 51);
+
+  if (!preview.length) { document.getElementById('tableWrap').innerHTML = '<p style="padding:20px;color:var(--muted);font-family:var(--mono);font-size:.75rem;">Hoja vacía</p>'; return; }
+
+  const headers = preview[0];
+  const rows = preview.slice(1);
+  const maxCols = Math.min(headers.length, 12);
+
+  let html = '<table><thead><tr><th>#</th>';
+  headers.slice(0, maxCols).forEach((h, i) => {
+    html += `<th>${h || 'COL_' + (i+1)}</th>`;
+  });
+  if (headers.length > maxCols) html += `<th>+${headers.length - maxCols} más</th>`;
+  html += '</tr></thead><tbody>';
+
+  rows.forEach((row, i) => {
+    html += `<tr><td class="row-num">${i + 1}</td>`;
+    for (let c = 0; c < maxCols; c++) {
+      const val = row[c] !== undefined ? String(row[c]) : '';
+      html += `<td title="${val}">${val.slice(0, 40)}${val.length > 40 ? '…' : ''}</td>`;
+    }
+    if (headers.length > maxCols) html += '<td>…</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('tableWrap').innerHTML = html;
+}
+
+// Convert to CSV
+document.getElementById('btnConvert').addEventListener('click', convertToCSV);
+
+function convertToCSV() {
+  if (!workbook) return;
+  const doTrim = document.querySelector('#opt-trim input').checked;
+  const doHeader = document.querySelector('#opt-header input').checked;
+  const doEmpty = document.querySelector('#opt-empty input').checked;
+
+  log('Iniciando conversión a CSV UTF-8...', 'info');
+  activateStep(3);
+
+  const ws = workbook.Sheets[currentSheet];
+  let data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+
+  if (!doHeader && data.length) data = data.slice(1);
+
+  if (doTrim) {
+    data = data.map(row => row.map(cell => typeof cell === 'string' ? cell.trim() : cell));
+    log('Espacios eliminados ✓', 'ok');
+  }
+
+  if (doEmpty) {
+    const before = data.length;
+    data = data.filter(row => row.some(cell => cell !== '' && cell !== null && cell !== undefined));
+    log(`Filas vacías eliminadas: ${before - data.length}`, 'ok');
+  }
+
+  // Build CSV
+  const csvLines = data.map(row =>
+    row.map(cell => {
+      const s = String(cell === null || cell === undefined ? '' : cell);
+      return (s.includes(';') || s.includes('"') || s.includes('\n'))
+        ? '"' + s.replace(/"/g, '""') + '"'
+        : s;
+    }).join(';')
+  );
+
+  const csvContent = csvLines.join('\r\n');
+
+  // UTF-8 BOM
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const outName = fileName.replace(/\.(xls|xlsx)$/i, '') + '_utf8.csv';
+  a.href = url;
+  a.download = outName;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  log(`CSV exportado: ${outName} ✓`, 'ok');
+  log(`Total filas: ${data.length} · Columnas: ${data[0]?.length || 0}`, 'info');
+  log('Encoding: UTF-8 con BOM ✓', 'ok');
+  activateStep(3, true);
+}
+
+// Generate n8n Flow
+document.getElementById('btnN8n').addEventListener('click', generateN8nFlow);
+
+function generateN8nFlow() {
+  if (!workbook) return;
+  activateStep(4);
+  log('Generando flujo n8n...', 'info');
+
+  const ws = workbook.Sheets[currentSheet];
+  const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const headers = data[0] || [];
+  const outName = fileName.replace(/\.(xls|xlsx)$/i, '') + '_utf8.csv';
+
+  const flow = {
+    "name": "ETL: XLS → CSV UTF-8",
+    "nodes": [
+      {
+        "parameters": { "filePath": "={{ $json.inputFile }}" },
+        "id": "node-1",
+        "name": "Read XLS File",
+        "type": "n8n-nodes-base.readBinaryFile",
+        "position": [240, 300]
+      },
+      {
+        "parameters": {
+          "operation": "fromFile",
+          "binaryPropertyName": "data",
+          "options": { "headerRow": true, "encoding": "utf8" }
+        },
+        "id": "node-2",
+        "name": "Spreadsheet → JSON",
+        "type": "n8n-nodes-base.spreadsheetFile",
+        "position": [480, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": `// Transformación: trim + normalización UTF-8\nconst items = $input.all();\nreturn items.map(item => {\n  const row = {};\n  for (const [k, v] of Object.entries(item.json)) {\n    row[k.trim()] = typeof v === 'string' ? v.trim() : v;\n  }\n  return { json: row };\n});`
+        },
+        "id": "node-3",
+        "name": "Transform & Clean",
+        "type": "n8n-nodes-base.code",
+        "position": [720, 300]
+      },
+      {
+        "parameters": {
+          "operation": "toFile",
+          "fileFormat": "csv",
+          "binaryPropertyName": "data",
+          "options": { "encoding": "utf8", "headerRow": true, "delimiter": "," }
+        },
+        "id": "node-4",
+        "name": "Write CSV UTF-8",
+        "type": "n8n-nodes-base.spreadsheetFile",
+        "position": [960, 300]
+      },
+      {
+        "parameters": { "filePath": `=${outName}` },
+        "id": "node-5",
+        "name": "Save File",
+        "type": "n8n-nodes-base.writeBinaryFile",
+        "position": [1200, 300]
+      }
+    ],
+    "connections": {
+      "Read XLS File": { "main": [[{ "node": "Spreadsheet → JSON", "type": "main", "index": 0 }]] },
+      "Spreadsheet → JSON": { "main": [[{ "node": "Transform & Clean", "type": "main", "index": 0 }]] },
+      "Transform & Clean": { "main": [[{ "node": "Write CSV UTF-8", "type": "main", "index": 0 }]] },
+      "Write CSV UTF-8": { "main": [[{ "node": "Save File", "type": "main", "index": 0 }]] }
+    },
+    "meta": {
+      "generatedBy": "ETL Tool",
+      "generatedAt": new Date().toISOString(),
+      "sourceFile": fileName,
+      "detectedColumns": headers.length,
+      "targetEncoding": "UTF-8"
+    }
+  };
+
+  // Render nodes
+  const nodesHtml = `
+    <div class="n8n-node">
+      <div class="node-icon">📂</div>
+      <div class="node-type">TRIGGER</div>
+      <div class="node-name">Read XLS</div>
+    </div>
+    <div class="n8n-edge">›</div>
+    <div class="n8n-node">
+      <div class="node-icon">📊</div>
+      <div class="node-type">EXTRACT</div>
+      <div class="node-name">Sheet → JSON</div>
+    </div>
+    <div class="n8n-edge">›</div>
+    <div class="n8n-node">
+      <div class="node-icon">⚙️</div>
+      <div class="node-type">TRANSFORM</div>
+      <div class="node-name">Clean & Trim</div>
+    </div>
+    <div class="n8n-edge">›</div>
+    <div class="n8n-node">
+      <div class="node-icon">📝</div>
+      <div class="node-type">LOAD</div>
+      <div class="node-name">Write CSV</div>
+    </div>
+    <div class="n8n-edge">›</div>
+    <div class="n8n-node">
+      <div class="node-icon">💾</div>
+      <div class="node-type">OUTPUT</div>
+      <div class="node-name">Save File</div>
+    </div>
+  `;
+
+  document.getElementById('n8nNodes').innerHTML = nodesHtml;
+
+  // Syntax highlight JSON
+  const jsonStr = JSON.stringify(flow, null, 2);
+  document.getElementById('n8nCode').innerHTML = syntaxHighlight(jsonStr);
+  document.getElementById('n8nPanel').classList.remove('hidden');
+
+  // Store for copy
+  document.getElementById('btnCopyN8n').dataset.json = jsonStr;
+
+  log(`Flujo n8n generado con ${flow.nodes.length} nodos ✓`, 'ok');
+  log('Copia el JSON e importa en n8n: Workflows → Import from JSON', 'info');
+  activateStep(4, true);
+}
+
+document.getElementById('btnCopyN8n').addEventListener('click', function() {
+  navigator.clipboard.writeText(this.dataset.json).then(() => {
+    const orig = this.textContent;
+    this.textContent = '✓ COPIADO';
+    setTimeout(() => this.textContent = orig, 2000);
+    log('JSON del flujo n8n copiado al portapapeles ✓', 'ok');
+  });
+});
+
+function syntaxHighlight(json) {
+  return json
+    .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+      if (/^"/.test(match)) {
+        if (/:$/.test(match)) return `<span class="key">${match}</span>`;
+        return `<span class="str">${match}</span>`;
+      }
+      if (/true|false/.test(match)) return `<span class="kw">${match}</span>`;
+      if (/null/.test(match)) return `<span class="kw">${match}</span>`;
+      return `<span class="num">${match}</span>`;
+    });
+}
+
+function activateStep(num, done = false) {
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById('step-' + i);
+    el.classList.remove('active', 'done');
+    if (i < num) el.classList.add('done');
+    else if (i === num) el.classList.add(done ? 'done' : 'active');
+  }
+}
+
+// Reset
+document.getElementById('btnReset').addEventListener('click', () => {
+  workbook = null; currentSheet = null; fileData = null; fileName = '';
+  ['metaPanel','previewPanel','transformPanel','actionsBar','logPanel','n8nPanel','progressBar']
+    .forEach(id => document.getElementById(id).classList.add('hidden'));
+  fileInput.value = '';
+  activateStep(1);
+  log('', 'info');
+  document.getElementById('logPanel').innerHTML = '';
+  document.getElementById('logPanel').classList.add('hidden');
+});
+</script>
+</body>
+</html>

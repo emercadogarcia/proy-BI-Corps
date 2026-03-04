@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="ETL Tool — Convierte archivos XLS/XLSX a CSV UTF-8 con separador punto y coma. Exporta flujos n8n." />
+  <title>ETL Tool — XLS → CSV UTF-8</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="img/logo.svg" />
+
+  <!-- Stylesheet -->
+  <style>
+/* ============================================================
+   ETL TOOL — Main Stylesheet
+   XLS/XLSX → CSV UTF-8 Converter with n8n Flow Export
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap');
+
+/* ── Variables ─────────────────────────────────────────────── */
+:root {
+  --bg:         #0a0a0f;
+  --surface:    #111118;
+  --surface2:   #1a1a26;
+  --surface3:   #0d0d17;
+  --border:     #2a2a3e;
+  --border-s:   rgba(42,42,62,0.5);
+  --accent:     #00f5a0;
+  --accent-dim: rgba(0,245,160,0.1);
+  --accent-glow:rgba(0,245,160,0.3);
+  --accent2:    #7b61ff;
+  --accent2-dim:rgba(123,97,255,0.1);
+  --accent2-br: rgba(123,97,255,0.2);
+  --accent3:    #ff6b6b;
+  --text:       #e8e8f0;
+  --muted:      #6b6b8a;
+  --mono:       'Space Mono', monospace;
+  --sans:       'Syne', sans-serif;
+  --radius:     4px;
+  --radius-lg:  6px;
+}
+
+/* ── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background:  var(--bg);
+  color:       var(--text);
+  font-family: var(--sans);
+  min-height:  100vh;
+  overflow-x:  hidden;
+  line-height: 1.5;
+}
+
+/* ── Grid Background ───────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,245,160,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,245,160,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Layout ────────────────────────────────────────────────── */
+.container {
+  position:   relative;
+  z-index:    1;
+  max-width:  980px;
+  margin:     0 auto;
+  padding:    40px 24px 100px;
+}
+
+/* ── Header ────────────────────────────────────────────────── */
+.header {
+  display:         flex;
+  align-items:     flex-start;
+  justify-content: space-between;
+  margin-bottom:   48px;
+  gap:             16px;
+}
+
+.header__logo h1 {
+  font-size:    2.2rem;
+  font-weight:  800;
+  letter-spacing: -1px;
+  line-height:  1;
+  background:   linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header__logo p {
+  font-family:    var(--mono);
+  font-size:      0.68rem;
+  color:          var(--muted);
+  margin-top:     6px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.header__badge {
+  background:     var(--accent-dim);
+  border:         1px solid rgba(0,245,160,0.3);
+  color:          var(--accent);
+  font-family:    var(--mono);
+  font-size:      0.65rem;
+  padding:        5px 12px;
+  border-radius:  var(--radius);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space:    nowrap;
+  margin-top:     4px;
+}
+
+/* ── Pipeline Steps ────────────────────────────────────────── */
+.pipeline {
+  display:        flex;
+  align-items:    center;
+  margin-bottom:  40px;
+  background:     var(--surface);
+  border:         1px solid var(--border);
+  border-radius:  var(--radius);
+  overflow:       hidden;
+}
+
+.pipeline__step {
+  flex:            1;
+  padding:         16px 20px;
+  display:         flex;
+  align-items:     center;
+  gap:             10px;
+  transition:      background 0.3s;
+}
+
+.pipeline__step--active { background: var(--accent-dim); }
+.pipeline__step--done   { background: var(--accent2-dim); }
+
+.pipeline__step-num {
+  font-family:    var(--mono);
+  font-size:      0.62rem;
+  color:          var(--muted);
+  border:         1px solid var(--border);
+  width:          22px;
+  height:         22px;
+  display:        flex;
+  align-items:    center;
+  justify-content:center;
+  border-radius:  var(--radius);
+  flex-shrink:    0;
+  transition:     all 0.3s;
+}
+
+.pipeline__step--active .pipeline__step-num {
+  border-color: var(--accent);
+  color:        var(--accent);
+  background:   var(--accent-dim);
+}
+
+.pipeline__step--done .pipeline__step-num {
+  border-color: var(--accent2);
+  color:        var(--accent2);
+  background:   var(--accent2-dim);
+}
+
+.pipeline__step-label {
+  font-size:      0.77rem;
+  font-weight:    600;
+  color:          var(--muted);
+  letter-spacing: 0.5px;
+  transition:     color 0.3s;
+}
+
+.pipeline__step--active .pipeline__step-label { color: var(--accent); }
+.pipeline__step--done   .pipeline__step-label { color: var(--text); }
+
+.pipeline__arrow {
+  color:     var(--border);
+  font-size: 1rem;
+  padding:   0 4px;
+  flex-shrink: 0;
+}
+
+/* ── Drop Zone ─────────────────────────────────────────────── */
+.drop-zone {
+  border:        2px dashed var(--border);
+  border-radius: var(--radius);
+  padding:       56px 32px;
+  text-align:    center;
+  cursor:        pointer;
+  transition:    all 0.25s;
+  background:    var(--surface);
+  position:      relative;
+  overflow:      hidden;
+  margin-bottom: 24px;
+}
+
+.drop-zone::before {
+  content:    '';
+  position:   absolute;
+  inset:      0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(0,245,160,0.05), transparent 70%);
+  opacity:    0;
+  transition: opacity 0.3s;
+}
+
+.drop-zone:hover,
+.drop-zone--dragover {
+  border-color: var(--accent);
+  background:   rgba(0,245,160,0.03);
+}
+
+.drop-zone:hover::before,
+.drop-zone--dragover::before { opacity: 1; }
+
+.drop-zone__icon {
+  font-size:     2.8rem;
+  margin-bottom: 16px;
+  display:       block;
+}
+
+.drop-zone__title {
+  font-size:     1.1rem;
+  font-weight:   600;
+  margin-bottom: 8px;
+  color:         var(--text);
+}
+
+.drop-zone__hint {
+  font-family:    var(--mono);
+  font-size:      0.7rem;
+  color:          var(--muted);
+  letter-spacing: 1px;
+}
+
+.drop-zone input[type="file"] { display: none; }
+
+/* ── Progress Bar ──────────────────────────────────────────── */
+.progress-bar {
+  height:        3px;
+  background:    var(--border);
+  border-radius: 2px;
+  margin-bottom: 24px;
+  overflow:      hidden;
+}
+
+.progress-bar__fill {
+  height:     100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  width:      0%;
+  transition: width 0.5s ease;
+  border-radius: 2px;
+}
+
+/* ── Panels ────────────────────────────────────────────────── */
+.panel {
+  background:    var(--surface);
+  border:        1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 24px;
+  overflow:      hidden;
+  animation:     slideIn 0.4s ease;
+}
+
+.panel--n8n {
+  border-color: var(--accent2);
+}
+
+.panel__header {
+  padding:         14px 20px;
+  border-bottom:   1px solid var(--border);
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  background:      var(--surface2);
+}
+
+.panel--n8n .panel__header {
+  background:   var(--accent2-dim);
+  border-color: var(--accent2-br);
+}
+
+.panel__title {
+  font-family:    var(--mono);
+  font-size:      0.68rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color:          var(--muted);
+  display:        flex;
+  align-items:    center;
+  gap:            8px;
+}
+
+.panel--n8n .panel__title { color: var(--accent2); }
+
+.panel__title-dot {
+  width:         6px;
+  height:        6px;
+  border-radius: 50%;
+  background:    var(--accent);
+  animation:     pulse 2s infinite;
+}
+
+.panel__subtitle {
+  font-family: var(--mono);
+  font-size:   0.63rem;
+  color:       var(--muted);
+}
+
+/* ── Meta Grid ─────────────────────────────────────────────── */
+.meta-grid {
+  display:               grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+}
+
+.meta-item {
+  padding:      16px 20px;
+  border-right: 1px solid var(--border);
+}
+
+.meta-item:last-child { border-right: none; }
+
+.meta-item__key {
+  font-family:    var(--mono);
+  font-size:      0.6rem;
+  color:          var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom:  4px;
+}
+
+.meta-item__val {
+  font-size:   1rem;
+  font-weight: 800;
+  color:       var(--text);
+}
+
+.meta-item__val--accent { color: var(--accent); }
+
+/* ── Sheet Selector ────────────────────────────────────────── */
+.sheet-selector {
+  padding:       14px 20px;
+  display:       flex;
+  align-items:   center;
+  gap:           10px;
+  flex-wrap:     wrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.sheet-selector__label {
+  font-family:    var(--mono);
+  font-size:      0.65rem;
+  color:          var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.sheet-btn {
+  font-family:    var(--mono);
+  font-size:      0.7rem;
+  padding:        5px 12px;
+  border:         1px solid var(--border);
+  background:     transparent;
+  color:          var(--muted);
+  cursor:         pointer;
+  border-radius:  var(--radius);
+  transition:     all 0.2s;
+}
+
+.sheet-btn:hover         { border-color: var(--accent2); color: var(--accent2); }
+.sheet-btn--active       { background: var(--accent2-dim); border-color: var(--accent2); color: var(--accent2); }
+
+/* ── Data Table ────────────────────────────────────────────── */
+.table-wrap {
+  overflow:   auto;
+  max-height: 320px;
+}
+
+.data-table {
+  width:           100%;
+  border-collapse: collapse;
+  font-family:     var(--mono);
+  font-size:       0.7rem;
+}
+
+.data-table thead th {
+  background:     var(--surface2);
+  padding:        10px 14px;
+  text-align:     left;
+  color:          var(--accent);
+  font-size:      0.62rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-bottom:  1px solid var(--border);
+  white-space:    nowrap;
+  position:       sticky;
+  top:            0;
+  z-index:        2;
+}
+
+.data-table tbody tr {
+  border-bottom: 1px solid var(--border-s);
+  transition:    background 0.15s;
+}
+
+.data-table tbody tr:hover         { background: rgba(123,97,255,0.04); }
+.data-table tbody tr:nth-child(even){ background: rgba(255,255,255,0.01); }
+
+.data-table tbody td {
+  padding:       9px 14px;
+  color:         var(--text);
+  white-space:   nowrap;
+  max-width:     200px;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+
+.data-table .row-num {
+  color:       var(--muted) !important;
+  font-size:   0.6rem;
+  user-select: none;
+}
+
+/* ── Transform Options ─────────────────────────────────────── */
+.transform-grid {
+  display:               grid;
+  grid-template-columns: 1fr 1fr;
+  gap:                   16px;
+  padding:               20px;
+}
+
+.option-card {
+  border:         1px solid var(--border);
+  border-radius:  var(--radius);
+  padding:        14px 16px;
+  display:        flex;
+  align-items:    flex-start;
+  gap:            12px;
+  cursor:         pointer;
+  transition:     all 0.2s;
+  background:     transparent;
+  text-align:     left;
+}
+
+.option-card:hover          { border-color: var(--accent2); background: var(--accent2-dim); }
+.option-card--checked       { border-color: var(--accent);  background: var(--accent-dim); }
+.option-card input[type="checkbox"] { display: none; }
+
+.option-card__check {
+  width:           18px;
+  height:          18px;
+  border:          1px solid var(--border);
+  border-radius:   2px;
+  flex-shrink:     0;
+  margin-top:      2px;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  font-size:       0.68rem;
+  transition:      all 0.2s;
+}
+
+.option-card--checked .option-card__check {
+  border-color: var(--accent);
+  background:   var(--accent);
+  color:        #000;
+}
+
+.option-card__label strong {
+  font-family:   var(--mono);
+  font-size:     0.7rem;
+  display:       block;
+  margin-bottom: 3px;
+  color:         var(--text);
+}
+
+.option-card__label span {
+  font-size:   0.68rem;
+  color:       var(--muted);
+  line-height: 1.4;
+}
+
+/* ── Separator Highlight ───────────────────────────────────── */
+.separator-info {
+  margin:        0 20px 20px;
+  padding:       10px 16px;
+  background:    rgba(0,245,160,0.06);
+  border:        1px solid rgba(0,245,160,0.2);
+  border-radius: var(--radius);
+  display:       flex;
+  align-items:   center;
+  gap:           12px;
+}
+
+.separator-info__symbol {
+  font-family:    var(--mono);
+  font-size:      1.4rem;
+  font-weight:    700;
+  color:          var(--accent);
+  background:     rgba(0,245,160,0.12);
+  border:         1px solid rgba(0,245,160,0.3);
+  width:          40px;
+  height:         40px;
+  display:        flex;
+  align-items:    center;
+  justify-content:center;
+  border-radius:  var(--radius);
+  flex-shrink:    0;
+}
+
+.separator-info__text strong {
+  font-family:    var(--mono);
+  font-size:      0.72rem;
+  color:          var(--text);
+  display:        block;
+  margin-bottom:  2px;
+}
+
+.separator-info__text span {
+  font-size: 0.68rem;
+  color:     var(--muted);
+}
+
+/* ── Action Buttons ────────────────────────────────────────── */
+.actions {
+  display:       flex;
+  gap:           12px;
+  margin-bottom: 24px;
+  flex-wrap:     wrap;
+}
+
+.btn {
+  font-family:    var(--mono);
+  font-size:      0.73rem;
+  padding:        12px 24px;
+  border:         1px solid;
+  cursor:         pointer;
+  border-radius:  var(--radius);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition:     all 0.2s;
+  display:        flex;
+  align-items:    center;
+  gap:            8px;
+  font-weight:    700;
+}
+
+.btn--primary {
+  background:   var(--accent);
+  border-color: var(--accent);
+  color:        #000;
+}
+
+.btn--primary:hover {
+  background:  #00e090;
+  transform:   translateY(-1px);
+  box-shadow:  0 4px 20px var(--accent-glow);
+}
+
+.btn--secondary {
+  background:   transparent;
+  border-color: var(--accent2);
+  color:        var(--accent2);
+}
+
+.btn--secondary:hover {
+  background: var(--accent2-dim);
+  transform:  translateY(-1px);
+}
+
+.btn--ghost {
+  background:   transparent;
+  border-color: var(--border);
+  color:        var(--muted);
+}
+
+.btn--ghost:hover { border-color: var(--text); color: var(--text); }
+
+.btn--sm { padding: 6px 14px; font-size: 0.63rem; }
+
+.btn:disabled {
+  opacity:   0.3;
+  cursor:    not-allowed;
+  transform: none !important;
+  box-shadow:none !important;
+}
+
+/* ── n8n Flow Nodes ────────────────────────────────────────── */
+.n8n-nodes {
+  display:     flex;
+  align-items: center;
+  padding:     28px 20px;
+  overflow-x:  auto;
+  gap:         0;
+}
+
+.n8n-node {
+  background:    var(--surface2);
+  border:        1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding:       14px 18px;
+  min-width:     130px;
+  text-align:    center;
+  flex-shrink:   0;
+  transition:    border-color 0.2s;
+}
+
+.n8n-node:hover { border-color: var(--accent2); }
+
+.n8n-node__icon  { font-size: 1.5rem; margin-bottom: 6px; display: block; }
+
+.n8n-node__type {
+  font-family:    var(--mono);
+  font-size:      0.55rem;
+  color:          var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.n8n-node__name {
+  font-size:   0.77rem;
+  font-weight: 600;
+  margin-top:  3px;
+  color:       var(--text);
+}
+
+.n8n-edge {
+  display:     flex;
+  align-items: center;
+  padding:     0 4px;
+  flex-shrink: 0;
+}
+
+.n8n-edge::after {
+  content:    '›';
+  display:    block;
+  color:      var(--accent2);
+  font-size:  1.4rem;
+  opacity:    0.6;
+}
+
+/* ── Code Block ────────────────────────────────────────────── */
+.code-block {
+  background:  var(--surface3);
+  border-top:  1px solid var(--border);
+  padding:     18px 20px;
+  font-family: var(--mono);
+  font-size:   0.67rem;
+  color:       #a0a0c0;
+  max-height:  220px;
+  overflow:    auto;
+  line-height: 1.75;
+  white-space: pre;
+}
+
+.code-block .ck  { color: var(--accent2); }   /* keyword  */
+.code-block .cs  { color: var(--accent); }    /* string   */
+.code-block .cn  { color: #ff9f7b; }          /* number   */
+.code-block .cp  { color: #7bbfff; }          /* property */
+
+/* ── Log Panel ─────────────────────────────────────────────── */
+.log {
+  background:    var(--surface3);
+  border:        1px solid var(--border);
+  border-radius: var(--radius);
+  padding:       14px 18px;
+  font-family:   var(--mono);
+  font-size:     0.68rem;
+  line-height:   1.9;
+  max-height:    160px;
+  overflow-y:    auto;
+  margin-bottom: 24px;
+}
+
+.log__entry    { display: flex; gap: 12px; }
+.log__time     { color: var(--muted); flex-shrink: 0; }
+.log__ok       { color: var(--accent); }
+.log__info     { color: var(--accent2); }
+.log__warn     { color: #ffcc00; }
+
+/* ── Scrollbars ────────────────────────────────────────────── */
+::-webkit-scrollbar          { width: 5px; height: 5px; }
+::-webkit-scrollbar-track    { background: var(--surface); }
+::-webkit-scrollbar-thumb    { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── Animations ────────────────────────────────────────────── */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* ── Utility ───────────────────────────────────────────────── */
+.u-hidden { display: none !important; }
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .transform-grid          { grid-template-columns: 1fr; }
+  .pipeline                { flex-direction: column; }
+  .pipeline__arrow         { transform: rotate(90deg); }
+  .header                  { flex-direction: column; }
+  .meta-grid               { grid-template-columns: 1fr 1fr; }
+}
+
+</style>
+
+  <!-- SheetJS (XLSX parsing) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+
+  <!-- App Logic -->
+  
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- ══ HEADER ══════════════════════════════════════════════ -->
+    <header class="header">
+      <div class="header__logo">
+        <img src="img/logo.svg" alt="ETL Tool Logo"
+             width="42" height="42"
+             style="display:block; margin-bottom:10px; border-radius:8px;" />
+        <h1>ETL TOOL</h1>
+        <p>Extract · Transform · Load</p>
+      </div>
+      <div class="header__badge">XLS / XLSX → CSV UTF-8 &nbsp;|&nbsp; Separador: ;</div>
+    </header>
+
+    <!-- ══ PIPELINE STEPS ══════════════════════════════════════ -->
+    <nav class="pipeline" aria-label="Pasos del proceso ETL">
+      <div class="pipeline__step pipeline__step--active" id="step-1">
+        <div class="pipeline__step-num">01</div>
+        <div class="pipeline__step-label">EXTRACT</div>
+      </div>
+      <div class="pipeline__arrow" aria-hidden="true">›</div>
+
+      <div class="pipeline__step" id="step-2">
+        <div class="pipeline__step-num">02</div>
+        <div class="pipeline__step-label">PREVIEW</div>
+      </div>
+      <div class="pipeline__arrow" aria-hidden="true">›</div>
+
+      <div class="pipeline__step" id="step-3">
+        <div class="pipeline__step-num">03</div>
+        <div class="pipeline__step-label">EXPORT CSV</div>
+      </div>
+      <div class="pipeline__arrow" aria-hidden="true">›</div>
+
+      <div class="pipeline__step" id="step-4">
+        <div class="pipeline__step-num">04</div>
+        <div class="pipeline__step-label">N8N FLOW</div>
+      </div>
+    </nav>
+
+    <!-- ══ DROP ZONE ═══════════════════════════════════════════ -->
+    <section class="drop-zone" id="dropZone" role="button"
+             tabindex="0" aria-label="Zona para cargar archivo XLS o XLSX">
+      <span class="drop-zone__icon" aria-hidden="true">📊</span>
+      <h2 class="drop-zone__title">Arrastra tu archivo aquí</h2>
+      <p class="drop-zone__hint">.XLS · .XLSX &mdash; o haz clic para seleccionar</p>
+      <input type="file" id="fileInput" accept=".xls,.xlsx" aria-label="Seleccionar archivo Excel" />
+    </section>
+
+    <!-- ══ PROGRESS BAR ════════════════════════════════════════ -->
+    <div class="progress-bar u-hidden" id="progressBar" role="progressbar" aria-label="Progreso de carga">
+      <div class="progress-bar__fill" id="progressFill"></div>
+    </div>
+
+    <!-- ══ FILE METADATA ═══════════════════════════════════════ -->
+    <section class="panel u-hidden" id="metaPanel" aria-label="Información del archivo">
+      <div class="panel__header">
+        <div class="panel__title">
+          <div class="panel__title-dot" aria-hidden="true"></div>
+          Archivo cargado
+        </div>
+        <span id="metaFileName" style="font-family:var(--mono);font-size:.68rem;color:var(--accent);"></span>
+      </div>
+      <div class="meta-grid" id="metaGrid"></div>
+    </section>
+
+    <!-- ══ PREVIEW PANEL ═══════════════════════════════════════ -->
+    <section class="panel u-hidden" id="previewPanel" aria-label="Previsualización de datos">
+      <div class="panel__header">
+        <div class="panel__title">Previsualización de datos</div>
+        <span class="panel__subtitle">Primeras 50 filas</span>
+      </div>
+
+      <!-- Sheet Tabs -->
+      <div class="sheet-selector u-hidden" id="sheetSelector">
+        <span class="sheet-selector__label">Hoja:</span>
+        <div id="sheetBtns" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+
+      <div class="table-wrap" id="tableWrap"></div>
+    </section>
+
+    <!-- ══ TRANSFORM OPTIONS ════════════════════════════════════ -->
+    <section class="panel u-hidden" id="transformPanel" aria-label="Opciones de transformación">
+      <div class="panel__header">
+        <div class="panel__title">Opciones de transformación</div>
+      </div>
+
+      <!-- Separator highlight -->
+      <div class="separator-info">
+        <div class="separator-info__symbol">;</div>
+        <div class="separator-info__text">
+          <strong>Separador: Punto y Coma ( ; )</strong>
+          <span>El CSV exportado usará ";" como delimitador de columnas, compatible con Excel en español y n8n.</span>
+        </div>
+      </div>
+
+      <div class="transform-grid">
+
+        <label class="option-card option-card--checked" id="opt-utf8">
+          <input type="checkbox" checked aria-label="UTF-8 encoding con BOM" />
+          <div class="option-card__check" aria-hidden="true">✓</div>
+          <div class="option-card__label">
+            <strong>UTF-8 ENCODING + BOM</strong>
+            <span>Codificación UTF-8 con BOM para máxima compatibilidad con Excel y sistemas externos.</span>
+          </div>
+        </label>
+
+        <label class="option-card option-card--checked" id="opt-trim">
+          <input type="checkbox" checked aria-label="Trim de espacios" />
+          <div class="option-card__check" aria-hidden="true">✓</div>
+          <div class="option-card__label">
+            <strong>TRIM DE ESPACIOS</strong>
+            <span>Elimina espacios al inicio y fin de cada celda antes de exportar.</span>
+          </div>
+        </label>
+
+        <label class="option-card option-card--checked" id="opt-header">
+          <input type="checkbox" checked aria-label="Incluir encabezados" />
+          <div class="option-card__check" aria-hidden="true">✓</div>
+          <div class="option-card__label">
+            <strong>INCLUIR ENCABEZADOS</strong>
+            <span>La primera fila del Excel se incluye como cabecera en el CSV resultante.</span>
+          </div>
+        </label>
+
+        <label class="option-card" id="opt-empty">
+          <input type="checkbox" aria-label="Omitir filas vacías" />
+          <div class="option-card__check" aria-hidden="true"></div>
+          <div class="option-card__label">
+            <strong>OMITIR FILAS VACÍAS</strong>
+            <span>Filtra y elimina filas completamente vacías del archivo de salida.</span>
+          </div>
+        </label>
+
+      </div>
+    </section>
+
+    <!-- ══ ACTION BUTTONS ══════════════════════════════════════ -->
+    <div class="actions u-hidden" id="actionsBar">
+      <button class="btn btn--primary" id="btnConvert">
+        ⚡ Convertir a CSV
+      </button>
+      <button class="btn btn--secondary" id="btnN8n">
+        🔗 Generar flujo n8n
+      </button>
+      <button class="btn btn--ghost" id="btnReset">
+        ↺ Nuevo archivo
+      </button>
+    </div>
+
+    <!-- ══ LOG PANEL ═══════════════════════════════════════════ -->
+    <div class="log u-hidden" id="logPanel" role="log" aria-live="polite" aria-label="Registro de actividad"></div>
+
+    <!-- ══ N8N FLOW PANEL ══════════════════════════════════════ -->
+    <section class="panel panel--n8n u-hidden" id="n8nPanel" aria-label="Flujo n8n generado">
+      <div class="panel__header">
+        <div class="panel__title">
+          <span aria-hidden="true">◈</span>
+          Flujo n8n generado
+        </div>
+        <button class="btn btn--secondary btn--sm" id="btnCopyN8n">
+          Copiar JSON
+        </button>
+      </div>
+
+      <!-- Visual Node Diagram -->
+      <div class="n8n-nodes" id="n8nNodes" aria-label="Diagrama de nodos n8n"></div>
+
+      <!-- JSON Code -->
+      <pre class="code-block" id="n8nCode" aria-label="JSON del flujo n8n"></pre>
+    </section>
+
+  </div><!-- /.container -->
+
+<script>
+/**
+ * ETL Tool — Main Application Logic
+ * XLS/XLSX → CSV UTF-8 (separator: semicolon)
+ * with n8n Flow Export
+ */
+
+'use strict';
+
+/* ── Constants ─────────────────────────────────────────────── */
+const SEPARATOR   = ';';
+const PREVIEW_ROWS = 50;
+const MAX_COLS     = 12;
+
+/* ── State ─────────────────────────────────────────────────── */
+let state = {
+  workbook:     null,
+  currentSheet: null,
+  fileName:     '',
+  fileSize:     0,
+};
+
+/* ── DOM Helpers ───────────────────────────────────────────── */
+const $  = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+function show(el) { el.classList.remove('u-hidden'); }
+function hide(el) { el.classList.add('u-hidden'); }
+
+/* ── Progress ──────────────────────────────────────────────── */
+function setProgress(pct) {
+  const bar  = $('#progressBar');
+  const fill = $('#progressFill');
+  show(bar);
+  fill.style.width = pct + '%';
+  if (pct >= 100) {
+    setTimeout(() => { hide(bar); fill.style.width = '0%'; }, 700);
+  }
+}
+
+/* ── Log ───────────────────────────────────────────────────── */
+function log(message, type = 'ok') {
+  const panel = $('#logPanel');
+  show(panel);
+  const time  = new Date().toTimeString().slice(0, 8);
+  const entry = document.createElement('div');
+  entry.className = 'log__entry';
+  entry.innerHTML = `<span class="log__time">[${time}]</span><span class="log__${type}">${message}</span>`;
+  panel.appendChild(entry);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+/* ── Pipeline Steps ────────────────────────────────────────── */
+function setStep(num, markDone = false) {
+  for (let i = 1; i <= 4; i++) {
+    const el = $(`#step-${i}`);
+    el.classList.remove('pipeline__step--active', 'pipeline__step--done');
+    if (i < num)          el.classList.add('pipeline__step--done');
+    else if (i === num)   el.classList.add(markDone ? 'pipeline__step--done' : 'pipeline__step--active');
+  }
+}
+
+/* ── File Handling ─────────────────────────────────────────── */
+function handleFile(file) {
+  if (!file) return;
+  if (!file.name.match(/\.(xls|xlsx)$/i)) {
+    alert('Por favor selecciona un archivo .XLS o .XLSX');
+    return;
+  }
+
+  resetUI();
+  state.fileName = file.name;
+  state.fileSize = file.size;
+  $('#logPanel').innerHTML = '';
+  log(`Cargando archivo: ${file.name}`, 'info');
+  setProgress(20);
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    setProgress(55);
+    try {
+      state.workbook = XLSX.read(new Uint8Array(e.target.result), {
+        type: 'array',
+        cellDates: true,
+      });
+      setProgress(80);
+      renderMeta(file);
+      renderSheets();
+      setProgress(100);
+      log('Archivo cargado correctamente ✓', 'ok');
+      log(`Hojas detectadas: ${state.workbook.SheetNames.join(', ')}`, 'info');
+      setStep(2);
+    } catch (err) {
+      log('Error al leer el archivo: ' + err.message, 'warn');
+      setProgress(0);
+    }
+  };
+  reader.onerror = () => log('Error al leer el archivo.', 'warn');
+  reader.readAsArrayBuffer(file);
+}
+
+/* ── Meta Panel ────────────────────────────────────────────── */
+function renderMeta(file) {
+  const sizeKB = (file.size / 1024).toFixed(1);
+  const sizeMB = (file.size / 1048576).toFixed(2);
+  const sheets = state.workbook.SheetNames;
+
+  let totalRows = 0;
+  sheets.forEach(name => {
+    const ws  = state.workbook.Sheets[name];
+    const ref = ws['!ref'];
+    if (ref) {
+      const range = XLSX.utils.decode_range(ref);
+      totalRows  += range.e.r;
+    }
+  });
+
+  $('#metaFileName').textContent = file.name;
+  $('#metaGrid').innerHTML = `
+    <div class="meta-item">
+      <div class="meta-item__key">Tamaño</div>
+      <div class="meta-item__val meta-item__val--accent">${sizeKB > 1024 ? sizeMB + ' MB' : sizeKB + ' KB'}</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-item__key">Hojas</div>
+      <div class="meta-item__val meta-item__val--accent">${sheets.length}</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-item__key">Filas aprox.</div>
+      <div class="meta-item__val">${totalRows.toLocaleString()}</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-item__key">Formato</div>
+      <div class="meta-item__val">${file.name.split('.').pop().toUpperCase()}</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-item__key">Separador</div>
+      <div class="meta-item__val meta-item__val--accent">; (punto y coma)</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-item__key">Encoding destino</div>
+      <div class="meta-item__val meta-item__val--accent">UTF-8 BOM</div>
+    </div>
+  `;
+  show($('#metaPanel'));
+}
+
+/* ── Sheet Selector & Table ────────────────────────────────── */
+function renderSheets() {
+  const names = state.workbook.SheetNames;
+  state.currentSheet = names[0];
+
+  const btnsContainer = $('#sheetBtns');
+  btnsContainer.innerHTML = '';
+
+  if (names.length > 1) {
+    show($('#sheetSelector'));
+    names.forEach(name => {
+      const btn = document.createElement('button');
+      btn.className = 'sheet-btn' + (name === state.currentSheet ? ' sheet-btn--active' : '');
+      btn.textContent = name;
+      btn.addEventListener('click', () => {
+        state.currentSheet = name;
+        $$('.sheet-btn').forEach(b => b.classList.remove('sheet-btn--active'));
+        btn.classList.add('sheet-btn--active');
+        renderTable();
+        log(`Hoja seleccionada: ${name}`, 'info');
+      });
+      btnsContainer.appendChild(btn);
+    });
+  }
+
+  renderTable();
+  show($('#previewPanel'));
+  show($('#transformPanel'));
+  show($('#actionsBar'));
+}
+
+function renderTable() {
+  const ws      = state.workbook.Sheets[state.currentSheet];
+  const data    = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const preview = data.slice(0, PREVIEW_ROWS + 1);
+
+  if (!preview.length) {
+    $('#tableWrap').innerHTML = '<p style="padding:20px;color:var(--muted);font-family:var(--mono);font-size:.75rem;">Hoja vacía</p>';
+    return;
+  }
+
+  const headers = preview[0];
+  const rows    = preview.slice(1);
+  const cols    = Math.min(headers.length, MAX_COLS);
+
+  let html = '<table class="data-table"><thead><tr><th>#</th>';
+  headers.slice(0, cols).forEach((h, i) => {
+    html += `<th>${escapeHtml(String(h || 'COL_' + (i + 1)))}</th>`;
+  });
+  if (headers.length > cols) html += `<th>+${headers.length - cols} más</th>`;
+  html += '</tr></thead><tbody>';
+
+  rows.forEach((row, i) => {
+    html += `<tr><td class="row-num">${i + 1}</td>`;
+    for (let c = 0; c < cols; c++) {
+      const raw = row[c] !== undefined ? String(row[c]) : '';
+      const val = raw.length > 40 ? raw.slice(0, 40) + '…' : raw;
+      html += `<td title="${escapeHtml(raw)}">${escapeHtml(val)}</td>`;
+    }
+    if (headers.length > cols) html += '<td>…</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  $('#tableWrap').innerHTML = html;
+}
+
+/* ── CSV Conversion ────────────────────────────────────────── */
+function convertToCSV() {
+  if (!state.workbook) return;
+
+  const doTrim   = $('#opt-trim input').checked;
+  const doHeader = $('#opt-header input').checked;
+  const doEmpty  = $('#opt-empty input').checked;
+
+  log('Iniciando conversión a CSV UTF-8...', 'info');
+  setStep(3);
+
+  const ws   = state.workbook.Sheets[state.currentSheet];
+  let data   = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+
+  if (!doHeader && data.length) {
+    data = data.slice(1);
+    log('Encabezados omitidos', 'info');
+  }
+
+  if (doTrim) {
+    data = data.map(row => row.map(cell =>
+      typeof cell === 'string' ? cell.trim() : cell
+    ));
+    log('Trim de espacios aplicado ✓', 'ok');
+  }
+
+  if (doEmpty) {
+    const before = data.length;
+    data = data.filter(row =>
+      row.some(cell => cell !== '' && cell !== null && cell !== undefined)
+    );
+    log(`Filas vacías eliminadas: ${before - data.length}`, 'ok');
+  }
+
+  /* Build CSV with semicolon separator */
+  const csvLines = data.map(row =>
+    row.map(cell => {
+      const s = String(cell === null || cell === undefined ? '' : cell);
+      /* Wrap in quotes if contains separator, quote or newline */
+      return (s.includes(SEPARATOR) || s.includes('"') || s.includes('\n'))
+        ? '"' + s.replace(/"/g, '""') + '"'
+        : s;
+    }).join(SEPARATOR)
+  );
+
+  const csvContent = csvLines.join('\r\n');
+  const BOM        = '\uFEFF';  /* UTF-8 BOM for Excel compatibility */
+  const blob       = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url        = URL.createObjectURL(blob);
+  const link       = document.createElement('a');
+  const outName    = state.fileName.replace(/\.(xls|xlsx)$/i, '') + '_utf8.csv';
+
+  link.href     = url;
+  link.download = outName;
+  link.click();
+  URL.revokeObjectURL(url);
+
+  log(`CSV exportado: ${outName} ✓`, 'ok');
+  log(`Filas: ${data.length} · Columnas: ${data[0]?.length || 0} · Separador: "${SEPARATOR}"`, 'info');
+  log('Encoding: UTF-8 con BOM ✓', 'ok');
+  setStep(3, true);
+}
+
+/* ── n8n Flow Generator ────────────────────────────────────── */
+function generateN8nFlow() {
+  if (!state.workbook) return;
+  setStep(4);
+  log('Generando flujo n8n...', 'info');
+
+  const ws      = state.workbook.Sheets[state.currentSheet];
+  const data    = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const headers = data[0] || [];
+  const outName = state.fileName.replace(/\.(xls|xlsx)$/i, '') + '_utf8.csv';
+
+  const flow = {
+    name: 'ETL: XLS → CSV UTF-8 (;)',
+    nodes: [
+      {
+        id: 'node-read',
+        name: 'Read XLS File',
+        type: 'n8n-nodes-base.readBinaryFile',
+        position: [200, 300],
+        parameters: { filePath: '={{ $json.inputFile }}' },
+      },
+      {
+        id: 'node-parse',
+        name: 'Spreadsheet → JSON',
+        type: 'n8n-nodes-base.spreadsheetFile',
+        position: [440, 300],
+        parameters: {
+          operation: 'fromFile',
+          binaryPropertyName: 'data',
+          options: { headerRow: true, encoding: 'utf8' },
+        },
+      },
+      {
+        id: 'node-transform',
+        name: 'Transform & Clean',
+        type: 'n8n-nodes-base.code',
+        position: [680, 300],
+        parameters: {
+          jsCode: [
+            '// Transformación: trim + normalización UTF-8',
+            'const items = $input.all();',
+            'return items',
+            '  .filter(item => Object.values(item.json).some(v => v !== \'\' && v != null))',
+            '  .map(item => {',
+            '    const row = {};',
+            '    for (const [k, v] of Object.entries(item.json)) {',
+            '      row[k.trim()] = typeof v === \'string\' ? v.trim() : v;',
+            '    }',
+            '    return { json: row };',
+            '  });',
+          ].join('\n'),
+        },
+      },
+      {
+        id: 'node-write',
+        name: 'Write CSV (semicolon)',
+        type: 'n8n-nodes-base.spreadsheetFile',
+        position: [920, 300],
+        parameters: {
+          operation: 'toFile',
+          fileFormat: 'csv',
+          binaryPropertyName: 'data',
+          options: {
+            encoding: 'utf8',
+            headerRow: true,
+            delimiter: ';',
+          },
+        },
+      },
+      {
+        id: 'node-save',
+        name: 'Save File',
+        type: 'n8n-nodes-base.writeBinaryFile',
+        position: [1160, 300],
+        parameters: { filePath: `=${outName}` },
+      },
+    ],
+    connections: {
+      'Read XLS File':       { main: [[{ node: 'Spreadsheet → JSON',   type: 'main', index: 0 }]] },
+      'Spreadsheet → JSON':  { main: [[{ node: 'Transform & Clean',    type: 'main', index: 0 }]] },
+      'Transform & Clean':   { main: [[{ node: 'Write CSV (semicolon)', type: 'main', index: 0 }]] },
+      'Write CSV (semicolon)': { main: [[{ node: 'Save File',          type: 'main', index: 0 }]] },
+    },
+    meta: {
+      generatedBy:     'ETL Tool',
+      generatedAt:     new Date().toISOString(),
+      sourceFile:      state.fileName,
+      detectedColumns: headers.length,
+      separator:       ';',
+      targetEncoding:  'UTF-8 BOM',
+    },
+  };
+
+  /* Render visual nodes */
+  const nodesData = [
+    { icon: '📂', type: 'EXTRACT',   name: 'Read XLS' },
+    { icon: '📊', type: 'PARSE',     name: 'Sheet → JSON' },
+    { icon: '⚙️', type: 'TRANSFORM', name: 'Clean & Trim' },
+    { icon: '📝', type: 'LOAD',      name: 'Write CSV ;' },
+    { icon: '💾', type: 'OUTPUT',    name: 'Save File' },
+  ];
+
+  let nodesHtml = '';
+  nodesData.forEach((node, i) => {
+    nodesHtml += `
+      <div class="n8n-node">
+        <span class="n8n-node__icon">${node.icon}</span>
+        <div class="n8n-node__type">${node.type}</div>
+        <div class="n8n-node__name">${node.name}</div>
+      </div>
+    `;
+    if (i < nodesData.length - 1) nodesHtml += '<div class="n8n-edge"></div>';
+  });
+
+  $('#n8nNodes').innerHTML = nodesHtml;
+
+  /* Syntax-highlighted JSON */
+  const jsonStr = JSON.stringify(flow, null, 2);
+  $('#n8nCode').innerHTML  = syntaxHighlight(jsonStr);
+  $('#btnCopyN8n').dataset.json = jsonStr;
+
+  show($('#n8nPanel'));
+  log(`Flujo n8n generado con ${flow.nodes.length} nodos ✓`, 'ok');
+  log('Copia el JSON e importa en n8n: Workflows → Import from JSON', 'info');
+  setStep(4, true);
+}
+
+/* ── Syntax Highlight ──────────────────────────────────────── */
+function syntaxHighlight(json) {
+  return json.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    (match) => {
+      if (/^"/.test(match)) {
+        return /:$/.test(match)
+          ? `<span class="cp">${match}</span>`
+          : `<span class="cs">${match}</span>`;
+      }
+      if (/true|false|null/.test(match)) return `<span class="ck">${match}</span>`;
+      return `<span class="cn">${match}</span>`;
+    }
+  );
+}
+
+/* ── Escape HTML ───────────────────────────────────────────── */
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/* ── Reset ─────────────────────────────────────────────────── */
+function resetUI() {
+  state = { workbook: null, currentSheet: null, fileName: '', fileSize: 0 };
+
+  ['metaPanel', 'previewPanel', 'transformPanel',
+   'actionsBar', 'logPanel', 'n8nPanel', 'progressBar',
+   'sheetSelector'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) hide(el);
+  });
+
+  const fileInput = $('#fileInput');
+  if (fileInput) fileInput.value = '';
+  setStep(1);
+}
+
+/* ── Init ──────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+
+  /* Drop Zone */
+  const dropZone  = $('#dropZone');
+  const fileInput = $('#fileInput');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drop-zone--dragover');
+  });
+
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('drop-zone--dragover');
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drop-zone--dragover');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+
+  /* Option Cards toggle */
+  $$('.option-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const cb  = card.querySelector('input[type="checkbox"]');
+      const box = card.querySelector('.option-card__check');
+      cb.checked = !cb.checked;
+      if (cb.checked) {
+        card.classList.add('option-card--checked');
+        box.textContent = '✓';
+      } else {
+        card.classList.remove('option-card--checked');
+        box.textContent = '';
+      }
+    });
+  });
+
+  /* Buttons */
+  $('#btnConvert').addEventListener('click', convertToCSV);
+  $('#btnN8n').addEventListener('click', generateN8nFlow);
+  $('#btnReset').addEventListener('click', resetUI);
+
+  $('#btnCopyN8n').addEventListener('click', function () {
+    navigator.clipboard.writeText(this.dataset.json || '').then(() => {
+      const orig = this.textContent;
+      this.textContent = '✓ COPIADO';
+      setTimeout(() => (this.textContent = orig), 2000);
+      log('JSON del flujo n8n copiado al portapapeles ✓', 'ok');
+    });
+  });
+});
+
+</script>
+</body>
+</html>

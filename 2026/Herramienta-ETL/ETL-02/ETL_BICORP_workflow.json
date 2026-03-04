@@ -1,0 +1,357 @@
+{
+  "name": "ETL Metadata-Driven — BI CORP",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [{ "mode": "everyMinute" }]
+        },
+        "filters": {
+          "readStatus": "unread",
+          "includeSpamTrash": false
+        },
+        "options": {
+          "attachmentsPrefix": "attachment",
+          "downloadAttachments": true
+        }
+      },
+      "id": "node_gmail_trigger",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [180, 400],
+      "credentials": {
+        "gmailOAuth2": { "id": "GMAIL_CREDENTIAL_ID", "name": "Gmail ETL Account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════\n// NODO 2: Validador de Archivo + Cálculo MD5\n// ══════════════════════════════════════════════════════════════\nconst crypto = require('crypto');\n\nconst item = $input.item;\nconst json = item.json;\n\n// 1. Detectar adjunto\nconst attachmentKey = Object.keys(item.binary ?? {}).find(k => k.startsWith('attachment'));\nif (!attachmentKey) {\n  throw new Error('NO_ATTACHMENT: El correo no contiene adjuntos.');\n}\n\nconst binaryMeta = item.binary[attachmentKey];\nconst fileName   = binaryMeta.fileName ?? binaryMeta.name ?? 'unknown.csv';\nconst mimeType   = binaryMeta.mimeType ?? '';\n\n// 2. Validar extensión\nconst allowedExt = ['.csv', '.txt', '.tsv'];\nconst ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();\nif (!allowedExt.includes(ext)) {\n  throw new Error(`INVALID_FORMAT: Extensión no soportada: ${ext}. Permitidos: ${allowedExt.join(', ')}`);\n}\n\n// 3. Leer datos binarios y calcular MD5\nconst binaryData = binaryMeta.data ?? '';\nconst buffer     = Buffer.from(binaryData, 'base64');\nconst md5Hash    = crypto.createHash('md5').update(buffer).digest('hex');\n\n// 4. Validar tamaño (máx 10 MB)\nconst MAX_BYTES = 10 * 1024 * 1024;\nif (buffer.length > MAX_BYTES) {\n  throw new Error(`FILE_TOO_LARGE: Archivo ${fileName} pesa ${(buffer.length/1024/1024).toFixed(2)}MB. Máximo permitido: 10MB.`);\n}\n\n// 5. Convertir binario a texto UTF-8\nconst rawText = buffer.toString('utf-8');\n\nreturn [{\n  json: {\n    fileName,\n    mimeType,\n    fileSize:      buffer.length,\n    md5Hash,\n    rawText,\n    binaryKey:     attachmentKey,\n    gmailMessageId: json.id ?? json.messageId ?? '',\n    gmailFrom:     json.from ?? '',\n    gmailSubject:  json.subject ?? '',\n    receivedAt:    new Date().toISOString(),\n    // Campos para query PG (se usan en nodo Postgres siguiente)\n    queryFileName: fileName,\n    queryMd5:      md5Hash,\n  }\n}];"
+      },
+      "id": "node_file_validator",
+      "name": "JS — Validador + MD5",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    c.archivo_id,\n    c.patron_nombre,\n    c.tabla_destino,\n    c.esquema_destino,\n    c.mapping_columnas,\n    c.columnas_clave,\n    c.delimitador,\n    l.log_id AS prev_log_id,\n    l.status AS prev_status\nFROM etl_config c\nLEFT JOIN etl_logs l\n    ON l.md5_hash = $2\n    AND l.status   = 'SUCCESS'\nWHERE $1 ~ c.patron_nombre\n  AND c.activo = TRUE\nORDER BY c.archivo_id\nLIMIT 1;",
+        "additionalFields": {
+          "queryParams": "={{ [$json.queryFileName, $json.queryMd5] }}"
+        }
+      },
+      "id": "node_pg_get_config",
+      "name": "PG — Buscar Config ETL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [620, 400],
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "PostgreSQL BI CORP" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════\n// NODO 4: Verificar Config + Duplicados\n// ══════════════════════════════════════════════════════════════\nconst pgResult = $input.item.json;\n\n// Si no hay resultado de PG, el archivo no tiene config\nif (!pgResult.archivo_id) {\n  throw new Error(`NO_CONFIG: El archivo '${$('JS — Validador + MD5').item.json.fileName}' no coincide con ningún patron_nombre en etl_config.`);\n}\n\n// Si ya fue procesado con éxito (MD5 duplicado)\nif (pgResult.prev_log_id && pgResult.prev_status === 'SUCCESS') {\n  throw new Error(`DUPLICATE: El archivo ya fue procesado exitosamente (log_id=${pgResult.prev_log_id}). MD5: ${$('JS — Validador + MD5').item.json.md5Hash}`);\n}\n\n// Recuperar datos del nodo validador\nconst validatorData = $('JS — Validador + MD5').item.json;\n\nreturn [{\n  json: {\n    ...validatorData,\n    etlConfig: {\n      archivo_id:       pgResult.archivo_id,\n      patron_nombre:    pgResult.patron_nombre,\n      tabla_destino:    pgResult.tabla_destino,\n      esquema_destino:  pgResult.esquema_destino ?? 'public',\n      mapping_columnas: typeof pgResult.mapping_columnas === 'string'\n                          ? JSON.parse(pgResult.mapping_columnas)\n                          : pgResult.mapping_columnas,\n      columnas_clave:   pgResult.columnas_clave,\n      delimitador:      pgResult.delimitador ?? null,\n    }\n  }\n}];"
+      },
+      "id": "node_check_config",
+      "name": "JS — Verificar Config + Duplicados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO etl_logs (\n    archivo_id,\n    nombre_archivo,\n    md5_hash,\n    tabla_destino,\n    status,\n    iniciado_en\n) VALUES ($1, $2, $3, $4, 'RUNNING', NOW())\nRETURNING log_id;",
+        "additionalFields": {
+          "queryParams": "={{ [\n  $json.etlConfig.archivo_id,\n  $json.fileName,\n  $json.md5Hash,\n  $json.etlConfig.tabla_destino\n] }}"
+        }
+      },
+      "id": "node_pg_init_log",
+      "name": "PG — Iniciar Log ETL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1060, 400],
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "PostgreSQL BI CORP" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════\n// NODO 6: Parser Universal CSV\n// Detecta delimitador, elimina BOM, parsea a array de objetos\n// ══════════════════════════════════════════════════════════════\n\nconst logId     = $input.item.json.log_id;\nconst prevData  = $('JS — Verificar Config + Duplicados').item.json;\nconst rawText   = prevData.rawText;\nconst etlConfig = prevData.etlConfig;\n\n// ── 1. Eliminar BOM UTF-8 ─────────────────────────────────────\nconst cleanText = rawText.replace(/^\\uFEFF/, '');\n\n// ── 2. Auto-detectar delimitador ─────────────────────────────\nfunction detectDelimiter(sample, forced) {\n  if (forced) return forced;\n  const firstLine = sample.split('\\n')[0];\n  const commas     = (firstLine.match(/,/g)  ?? []).length;\n  const semicolons = (firstLine.match(/;/g)  ?? []).length;\n  const tabs       = (firstLine.match(/\\t/g) ?? []).length;\n  if (tabs > commas && tabs > semicolons) return '\\t';\n  return semicolons > commas ? ';' : ',';\n}\n\n// ── 3. Parser CSV robusto (maneja comillas y saltos internos) ─\nfunction splitLine(line, delim) {\n  const result = [];\n  let cur = '', inQuote = false;\n  for (let i = 0; i < line.length; i++) {\n    const ch = line[i];\n    if (ch === '\"' && line[i + 1] === '\"') { cur += '\"'; i++; }\n    else if (ch === '\"')  { inQuote = !inQuote; }\n    else if (ch === delim && !inQuote) { result.push(cur); cur = ''; }\n    else { cur += ch; }\n  }\n  result.push(cur);\n  return result;\n}\n\nfunction parseCSV(text, delim) {\n  const lines   = text.replace(/\\r\\n/g, '\\n').replace(/\\r/g, '\\n').split('\\n');\n  const headers = splitLine(lines[0], delim).map(h => h.trim().replace(/^\"|\"$/g, ''));\n  const records = [];\n\n  for (let i = 1; i < lines.length; i++) {\n    const line = lines[i].trim();\n    if (!line) continue;\n    const values = splitLine(line, delim);\n    if (values.every(v => !v.trim())) continue;\n\n    const obj = {};\n    headers.forEach((h, idx) => {\n      obj[h] = (values[idx] ?? '').trim().replace(/^\"|\"$/g, '');\n    });\n    records.push(obj);\n  }\n  return { headers, records };\n}\n\n// ── 4. Ejecutar parseo ────────────────────────────────────────\nconst delim  = detectDelimiter(cleanText, etlConfig.delimitador);\nconst parsed = parseCSV(cleanText, delim);\n\nif (!parsed.records.length) {\n  throw new Error(`EMPTY_FILE: El archivo '${prevData.fileName}' no contiene filas de datos.`);\n}\n\nreturn [{\n  json: {\n    ...prevData,\n    logId:      logId,\n    delimiter:  delim,\n    totalRows:  parsed.records.length,\n    csvHeaders: parsed.headers,\n    records:    parsed.records,\n  }\n}];"
+      },
+      "id": "node_parser",
+      "name": "JS — Parser Universal CSV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════\n// NODO 7: Limpiador de Datos Dinámico\n// Aplica mapping, trim, normaliza monedas y fechas\n// ══════════════════════════════════════════════════════════════\n\nconst { records, etlConfig, logId, md5Hash, fileName } = $input.item.json;\nconst mapping = etlConfig.mapping_columnas;\n\n// ── Helpers ───────────────────────────────────────────────────\n\nfunction parseCurrency(raw) {\n  if (raw === null || raw === undefined || raw === '') return null;\n  let str = String(raw).trim();\n  // Negativo entre paréntesis: (1.234,56) → -1234.56\n  const isNegative = /^\\(.*\\)$/.test(str);\n  if (isNegative) str = str.replace(/[()]/g, '').trim();\n  // Eliminar símbolo de moneda y espacios\n  str = str.replace(/[$€£¥Bs\\.\\s]/g, ' ').trim();\n  // Reemplazar espacios usados como separador de miles\n  str = str.replace(/ /g, '');\n  // Formato europeo: 1.234,56\n  const hasEuroFormat = /\\d\\.\\d{3}/.test(str) && str.includes(',');\n  if (hasEuroFormat) {\n    str = str.replace(/\\./g, '').replace(',', '.');\n  } else {\n    str = str.replace(/,/g, '');\n  }\n  const num = parseFloat(str);\n  if (isNaN(num)) return null;\n  return isNegative ? -Math.abs(num) : num;\n}\n\nfunction parseDate(raw) {\n  if (!raw) return null;\n  const str = String(raw).trim();\n  // ISO ya correcto\n  if (/^\\d{4}-\\d{2}-\\d{2}/.test(str)) return str.slice(0, 10);\n  // DD/MM/YYYY o DD-MM-YYYY\n  const dmy = str.match(/^(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})$/);\n  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`;\n  // MM/DD/YYYY (formato US)\n  const mdy = str.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{2,4})$/);\n  if (mdy) {\n    const year = mdy[3].length === 2 ? '20' + mdy[3] : mdy[3];\n    const d = new Date(`${year}-${mdy[1].padStart(2,'0')}-${mdy[2].padStart(2,'0')}`);\n    if (!isNaN(d)) return d.toISOString().slice(0, 10);\n  }\n  // YYYYMM (periodo)\n  if (/^\\d{6}$/.test(str)) return `${str.slice(0,4)}-${str.slice(4,6)}-01`;\n  // Fallback nativo\n  const d = new Date(str);\n  if (!isNaN(d)) return d.toISOString().slice(0, 10);\n  return null;\n}\n\nfunction looksLikeNumber(val) {\n  return /^-?[\\d.,()\\s$€£¥Bs]+$/.test(String(val).trim());\n}\n\nfunction looksLikeDate(colName) {\n  return /fecha|date|fec|periodo|period|dt_/i.test(colName);\n}\n\n// ── Procesamiento ─────────────────────────────────────────────\nconst cleaned  = [];\nconst rejected = [];\n\nfor (let i = 0; i < records.length; i++) {\n  const raw = records[i];\n  const out = {};\n\n  try {\n    for (const [csvCol, dbCol] of Object.entries(mapping)) {\n      let val = raw[csvCol];\n      if (val === undefined) continue;\n\n      val = String(val ?? '').trim();\n\n      // Null semántico\n      if (['', 'NULL', 'null', 'N/A', 'n/a', 'NA', '-', 'undefined'].includes(val)) {\n        out[dbCol] = null;\n        continue;\n      }\n\n      // Fechas (prioridad sobre número para evitar parsear timestamps)\n      if (looksLikeDate(csvCol) || looksLikeDate(dbCol)) {\n        out[dbCol] = parseDate(val);\n        continue;\n      }\n\n      // Monedas / números\n      if (looksLikeNumber(val)) {\n        out[dbCol] = parseCurrency(val);\n        continue;\n      }\n\n      // Booleanos\n      if (/^(true|false|si|no|yes|1|0)$/i.test(val)) {\n        out[dbCol] = /^(true|si|yes|1)$/i.test(val);\n        continue;\n      }\n\n      // Texto plano\n      out[dbCol] = val;\n    }\n\n    // Metadatos de auditoría\n    out._etl_log_id    = logId;\n    out._etl_md5       = md5Hash;\n    out._etl_loaded_at = new Date().toISOString();\n\n    cleaned.push(out);\n\n  } catch (err) {\n    rejected.push({\n      log_id:       logId,\n      tabla_destino: etlConfig.tabla_destino,\n      fila_numero:  i + 2,\n      fila_raw:     JSON.stringify(raw),\n      motivo_error: err.message,\n    });\n  }\n}\n\nreturn [{\n  json: {\n    ...($input.item.json),\n    cleanedRecords:  cleaned,\n    rejectedRecords: rejected,\n    totalCleaned:    cleaned.length,\n    totalRejected:   rejected.length,\n  }\n}];"
+      },
+      "id": "node_cleaner",
+      "name": "JS — Limpiador Dinámico",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════\n// NODO 8: Generador de UPSERT Dinámico por Lotes\n// Construye queries SQL con BEGIN/COMMIT por lote de 100 filas\n// ══════════════════════════════════════════════════════════════\n\nconst { cleanedRecords, etlConfig, logId } = $input.item.json;\nconst BATCH_SIZE = 100;\n\nconst tabla      = `\"${etlConfig.esquema_destino}\".\"${etlConfig.tabla_destino}\"`;\nconst keyColumns = etlConfig.columnas_clave;\n\nfunction buildUpsertQuery(batch, tabla, keyColumns) {\n  if (!batch.length) return null;\n\n  const allCols   = Object.keys(batch[0]).filter(c => !c.startsWith('_etl_'));\n  const auditCols = ['_etl_log_id', '_etl_md5', '_etl_loaded_at'];\n  const fullCols  = [...allCols, ...auditCols];\n\n  // Columnas que se actualizan en CONFLICT\n  const updateCols = allCols.filter(c => !keyColumns.includes(c));\n\n  // Generar VALUE placeholders\n  let paramIndex = 1;\n  const valuePlaceholders = batch.map(row => {\n    const ph = fullCols.map(() => `$${paramIndex++}`).join(', ');\n    return `(${ph})`;\n  }).join(',\\n    ');\n\n  // Valores aplanados\n  const flatValues = batch.flatMap(row =>\n    fullCols.map(c => (row[c] !== undefined ? row[c] : null))\n  );\n\n  // SET clause\n  const auditSet  = `_etl_log_id = EXCLUDED._etl_log_id, _etl_loaded_at = EXCLUDED._etl_loaded_at`;\n  const dataSet   = updateCols.map(c => `\"${c}\" = EXCLUDED.\"${c}\"`).join(',\\n      ');\n  const setClause = updateCols.length ? `${dataSet},\\n      ${auditSet}` : auditSet;\n\n  const colList  = fullCols.map(c => `\"${c}\"`).join(', ');\n  const keyList  = keyColumns.map(c => `\"${c}\"`).join(', ');\n\n  const sql = `BEGIN;\\nINSERT INTO ${tabla} (${colList})\\nVALUES\\n    ${valuePlaceholders}\\nON CONFLICT (${keyList})\\nDO UPDATE SET\\n    ${setClause};\\nCOMMIT;`;\n\n  return { sql, values: flatValues, count: batch.length };\n}\n\n// Dividir en lotes\nconst batches = [];\nfor (let i = 0; i < cleanedRecords.length; i += BATCH_SIZE) {\n  batches.push(cleanedRecords.slice(i, i + BATCH_SIZE));\n}\n\nconst queries = batches\n  .map(b => buildUpsertQuery(b, tabla, keyColumns))\n  .filter(Boolean)\n  .map((q, i) => ({ ...q, batchIndex: i + 1, totalBatches: batches.length }));\n\nreturn [{\n  json: {\n    ...($input.item.json),\n    upsertQueries: queries,\n    totalBatches:  queries.length,\n    currentBatch:  0,\n  }\n}];"
+      },
+      "id": "node_upsert_builder",
+      "name": "JS — Generador UPSERT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1720, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════\n// NODO 9: Splitter de Lotes\n// Convierte el array de queries en ítems individuales para\n// que el nodo Postgres los ejecute en un loop\n// ══════════════════════════════════════════════════════════════\n\nconst data         = $input.item.json;\nconst upsertQueries = data.upsertQueries ?? [];\n\nif (!upsertQueries.length) {\n  throw new Error('NO_QUERIES: No se generaron queries de UPSERT. Verifique cleanedRecords.');\n}\n\n// Emitir un ítem por cada lote\nreturn upsertQueries.map(q => ({\n  json: {\n    // Contexto completo para el nodo PG\n    batchSql:     q.sql,\n    batchValues:  q.values,\n    batchCount:   q.count,\n    batchIndex:   q.batchIndex,\n    totalBatches: q.totalBatches,\n    // Contexto heredado\n    logId:        data.logId,\n    fileName:     data.fileName,\n    md5Hash:      data.md5Hash,\n    totalCleaned: data.totalCleaned,\n    totalRejected: data.totalRejected,\n    rejectedRecords: data.rejectedRecords,\n    etlConfig:    data.etlConfig,\n    gmailMessageId: data.gmailMessageId,\n  }\n}));"
+      },
+      "id": "node_batch_splitter",
+      "name": "JS — Splitter de Lotes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1940, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.batchSql }}",
+        "additionalFields": {
+          "queryParams": "={{ $json.batchValues }}"
+        }
+      },
+      "id": "node_pg_upsert",
+      "name": "PG — Ejecutar UPSERT",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2160, 400],
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "PostgreSQL BI CORP" }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════\n// NODO 11: Agregador de Resultados\n// Consolida todos los lotes procesados en un único resumen\n// ══════════════════════════════════════════════════════════════\n\nconst allItems = $input.all();\n\nif (!allItems.length) {\n  throw new Error('AGGREGATE_ERROR: No hay ítems para agregar.');\n}\n\n// Tomar metadatos del primer ítem\nconst first = allItems[0].json;\n\n// Contar totales\nconst totalOk    = allItems.reduce((acc, it) => acc + (it.json.batchCount ?? 0), 0);\nconst logId      = first.logId;\nconst fileName   = first.fileName;\nconst etlConfig  = first.etlConfig;\nconst rejectedRecords = first.rejectedRecords ?? [];\nconst totalRejected   = first.totalRejected ?? 0;\nconst gmailMessageId  = first.gmailMessageId ?? '';\n\nreturn [{\n  json: {\n    logId,\n    fileName,\n    etlConfig,\n    gmailMessageId,\n    totalOk,\n    totalRejected,\n    rejectedRecords,\n    batchesProcessed: allItems.length,\n    status: 'SUCCESS',\n  }\n}];"
+      },
+      "id": "node_aggregator",
+      "name": "JS — Agregador de Resultados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2380, 300],
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE etl_logs\nSET\n    status          = 'SUCCESS',\n    registros_ok    = $1,\n    registros_error = $2,\n    finalizado_en   = NOW()\nWHERE log_id = $3;",
+        "additionalFields": {
+          "queryParams": "={{ [$json.totalOk, $json.totalRejected, $json.logId] }}"
+        }
+      },
+      "id": "node_pg_log_success",
+      "name": "PG — Log SUCCESS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2600, 300],
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "PostgreSQL BI CORP" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════\n// NODO 13: Insertar Filas Rechazadas (si hay)\n// ══════════════════════════════════════════════════════════════\n\nconst { rejectedRecords, logId, etlConfig } = $input.item.json;\n\nif (!rejectedRecords || !rejectedRecords.length) {\n  return [{ json: { rejectedInserted: 0, skipped: true } }];\n}\n\n// Construir INSERT batch de rechazados\nlet paramIdx = 1;\nconst placeholders = rejectedRecords.map(() => {\n  return `($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}::jsonb, $${paramIdx++})`;\n}).join(', ');\n\nconst values = rejectedRecords.flatMap(r => [\n  logId,\n  etlConfig?.tabla_destino ?? 'unknown',\n  r.fila_numero,\n  typeof r.fila_raw === 'string' ? r.fila_raw : JSON.stringify(r.fila_raw),\n  r.motivo_error ?? 'Error desconocido',\n]);\n\nconst sql = `INSERT INTO etl_rejected (log_id, tabla_destino, fila_numero, fila_raw, motivo_error) VALUES ${placeholders}`;\n\nreturn [{\n  json: {\n    rejectedSQL:    sql,\n    rejectedValues: values,\n    rejectedCount:  rejectedRecords.length,\n    logId,\n  }\n}];"
+      },
+      "id": "node_rejected_builder",
+      "name": "JS — Preparar Rechazados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2820, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.skipped ? 'SELECT 1' : $json.rejectedSQL }}",
+        "additionalFields": {
+          "queryParams": "={{ $json.skipped ? [] : $json.rejectedValues }}"
+        }
+      },
+      "id": "node_pg_rejected",
+      "name": "PG — Insertar Rechazados",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [3040, 300],
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "PostgreSQL BI CORP" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════\n// NODO 15: Gestión de Labels Gmail\n// Mueve el correo a la carpeta correcta según resultado\n// ══════════════════════════════════════════════════════════════\n\n// Este nodo puede venir de SUCCESS o de ERROR\n// Detectar origen por presencia de campos\nconst json = $input.item.json;\n\nconst status = json.status ?? 'ERROR';\nconst gmailMessageId = json.gmailMessageId ?? '';\n\nconst LABELS = {\n  SUCCESS:   'etl/processed',\n  ERROR:     'etl/rejected',\n  DUPLICADO: 'etl/duplicates',\n  NO_CONFIG: 'etl/unrecognized',\n  RUNNING:   'etl/processing',\n};\n\n// Detectar tipo de error para categorizar mejor\nlet labelKey = status;\nif (status === 'ERROR') {\n  const msg = json.errorMessage ?? '';\n  if (msg.includes('DUPLICATE'))  labelKey = 'DUPLICADO';\n  if (msg.includes('NO_CONFIG'))  labelKey = 'NO_CONFIG';\n}\n\nconst addLabel    = LABELS[labelKey] ?? LABELS.ERROR;\nconst removeLabel = 'INBOX';\n\nreturn [{\n  json: {\n    gmailMessageId,\n    addLabel,\n    removeLabel,\n    status,\n    processedAt: new Date().toISOString(),\n    summary: {\n      fileName:     json.fileName ?? 'unknown',\n      totalOk:      json.totalOk ?? 0,\n      totalRejected: json.totalRejected ?? 0,\n      logId:        json.logId ?? null,\n    }\n  }\n}];"
+      },
+      "id": "node_gmail_label",
+      "name": "JS — Gmail Label Manager",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3260, 300]
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.gmailMessageId }}",
+        "labelIds": "={{ [$json.addLabel] }}"
+      },
+      "id": "node_gmail_move",
+      "name": "Gmail — Etiquetar Correo",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [3480, 300],
+      "credentials": {
+        "gmailOAuth2": { "id": "GMAIL_CREDENTIAL_ID", "name": "Gmail ETL Account" }
+      }
+    },
+
+    {
+      "parameters": {
+        "jsCode": "// ══════════════════════════════════════════════════════════════\n// NODO ERROR: Manejador Global de Errores con ROLLBACK\n// Conectar al output de error de cualquier nodo crítico\n// ══════════════════════════════════════════════════════════════\n\nconst errorItem  = $input.item;\nconst errorMsg   = errorItem.json.error?.message ?? errorItem.json.message ?? 'Error desconocido';\nconst errorNode  = errorItem.json.error?.node ?? 'unknown';\n\n// Intentar recuperar logId y contexto de nodos anteriores\nlet logId       = null;\nlet fileName    = 'unknown';\nlet gmailMsgId  = '';\nlet statusCode  = 'ERROR';\n\ntry {\n  const validatorData = $('JS — Validador + MD5').item?.json;\n  fileName   = validatorData?.fileName   ?? fileName;\n  gmailMsgId = validatorData?.gmailMessageId ?? '';\n} catch (_) {}\n\ntry {\n  const logData = $('PG — Iniciar Log ETL').item?.json;\n  logId = logData?.log_id ?? null;\n} catch (_) {}\n\n// Detectar tipo de error\nif (errorMsg.includes('DUPLICATE')) statusCode = 'DUPLICADO';\nif (errorMsg.includes('NO_CONFIG')) statusCode = 'NO_CONFIG';\n\nconst rollbackSQL = logId\n  ? `ROLLBACK; UPDATE etl_logs SET status='ERROR', mensaje_error=$1, finalizado_en=NOW() WHERE log_id=$2;`\n  : `ROLLBACK;`;\n\nconst rollbackValues = logId\n  ? [`[${errorNode}] ${errorMsg}`, logId]\n  : [];\n\nreturn [{\n  json: {\n    rollbackSQL,\n    rollbackValues,\n    logId,\n    fileName,\n    gmailMessageId: gmailMsgId,\n    status:         statusCode,\n    errorMessage:   errorMsg,\n    errorNode,\n    failedAt:       new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "node_error_handler",
+      "name": "JS — Error Handler Global",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 620]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.rollbackSQL }}",
+        "additionalFields": {
+          "queryParams": "={{ $json.rollbackValues }}"
+        }
+      },
+      "id": "node_pg_rollback",
+      "name": "PG — ROLLBACK + Log ERROR",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [2380, 620],
+      "credentials": {
+        "postgres": { "id": "POSTGRES_CREDENTIAL_ID", "name": "PostgreSQL BI CORP" }
+      }
+    },
+    {
+      "parameters": {
+        "subject": "=⚠️ ETL BI CORP — Error en {{ $json.fileName }}",
+        "message": "=<h2>Error en Pipeline ETL — BI CORP</h2>\n<table border=\"1\" cellpadding=\"6\" style=\"border-collapse:collapse;font-family:Arial\">\n  <tr><td><b>Archivo</b></td><td>{{ $json.fileName }}</td></tr>\n  <tr><td><b>Tipo Error</b></td><td>{{ $json.status }}</td></tr>\n  <tr><td><b>Detalle</b></td><td>{{ $json.errorMessage }}</td></tr>\n  <tr><td><b>Nodo</b></td><td>{{ $json.errorNode }}</td></tr>\n  <tr><td><b>Log ID</b></td><td>{{ $json.logId ?? 'N/A' }}</td></tr>\n  <tr><td><b>Timestamp</b></td><td>{{ $json.failedAt }}</td></tr>\n</table>\n<p>Revisar tabla <code>etl_logs</code> y <code>etl_rejected</code> en PostgreSQL.</p>",
+        "options": {
+          "htmlBody": true
+        },
+        "toList": "admin@bicorp.com"
+      },
+      "id": "node_email_error",
+      "name": "Gmail — Notificar Error",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [2600, 620],
+      "credentials": {
+        "gmailOAuth2": { "id": "GMAIL_CREDENTIAL_ID", "name": "Gmail ETL Account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Redirigir al Gmail Label Manager desde el flujo de error\nconst json = $input.item.json;\nreturn [{ json }];"
+      },
+      "id": "node_error_to_label",
+      "name": "JS — Error a Label",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2820, 620]
+    }
+  ],
+
+  "connections": {
+    "Gmail Trigger": {
+      "main": [[{ "node": "JS — Validador + MD5", "type": "main", "index": 0 }]]
+    },
+    "JS — Validador + MD5": {
+      "main": [[{ "node": "PG — Buscar Config ETL", "type": "main", "index": 0 }]]
+    },
+    "PG — Buscar Config ETL": {
+      "main": [[{ "node": "JS — Verificar Config + Duplicados", "type": "main", "index": 0 }]]
+    },
+    "JS — Verificar Config + Duplicados": {
+      "main": [[{ "node": "PG — Iniciar Log ETL", "type": "main", "index": 0 }]]
+    },
+    "PG — Iniciar Log ETL": {
+      "main": [[{ "node": "JS — Parser Universal CSV", "type": "main", "index": 0 }]]
+    },
+    "JS — Parser Universal CSV": {
+      "main": [[{ "node": "JS — Limpiador Dinámico", "type": "main", "index": 0 }]]
+    },
+    "JS — Limpiador Dinámico": {
+      "main": [[{ "node": "JS — Generador UPSERT", "type": "main", "index": 0 }]]
+    },
+    "JS — Generador UPSERT": {
+      "main": [[{ "node": "JS — Splitter de Lotes", "type": "main", "index": 0 }]]
+    },
+    "JS — Splitter de Lotes": {
+      "main": [[{ "node": "PG — Ejecutar UPSERT", "type": "main", "index": 0 }]]
+    },
+    "PG — Ejecutar UPSERT": {
+      "main": [
+        [{ "node": "JS — Agregador de Resultados", "type": "main", "index": 0 }],
+        [{ "node": "JS — Error Handler Global",    "type": "main", "index": 0 }]
+      ]
+    },
+    "JS — Agregador de Resultados": {
+      "main": [[{ "node": "PG — Log SUCCESS", "type": "main", "index": 0 }]]
+    },
+    "PG — Log SUCCESS": {
+      "main": [[{ "node": "JS — Preparar Rechazados", "type": "main", "index": 0 }]]
+    },
+    "JS — Preparar Rechazados": {
+      "main": [[{ "node": "PG — Insertar Rechazados", "type": "main", "index": 0 }]]
+    },
+    "PG — Insertar Rechazados": {
+      "main": [[{ "node": "JS — Gmail Label Manager", "type": "main", "index": 0 }]]
+    },
+    "JS — Gmail Label Manager": {
+      "main": [[{ "node": "Gmail — Etiquetar Correo", "type": "main", "index": 0 }]]
+    },
+    "JS — Error Handler Global": {
+      "main": [[{ "node": "PG — ROLLBACK + Log ERROR", "type": "main", "index": 0 }]]
+    },
+    "PG — ROLLBACK + Log ERROR": {
+      "main": [[{ "node": "Gmail — Notificar Error", "type": "main", "index": 0 }]]
+    },
+    "Gmail — Notificar Error": {
+      "main": [[{ "node": "JS — Error a Label", "type": "main", "index": 0 }]]
+    },
+    "JS — Error a Label": {
+      "main": [[{ "node": "JS — Gmail Label Manager", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "timezone": "America/Bogota"
+  },
+  "staticData": null,
+  "tags": [
+    { "id": "tag_etl",    "name": "ETL" },
+    { "id": "tag_bicorp", "name": "BI CORP" },
+    { "id": "tag_fin",    "name": "Financiero" }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-01T00:00:00.000Z",
+  "versionId": "v1.0.0"
+}
